@@ -176,6 +176,8 @@ const CONFIG = {
   //   phone:  clinic phone. When filled, the "Clinic phone" setup field is hidden.
   //   mobile: periodontist's mobile. When filled, the "Periodontist mobile" setup field is hidden.
   practice: { name: '', phone: '', mobile: '' },
+  // Clinic number already filled in at setup (public practice landline). The patient can still change it.
+  prefill: { phone: '020 7580 0999' },
 
   // true  = the app works out "next due" times for each medicine, puts doses in
   //         Today's Now/Later lists, warns about early doses and offers a calendar reminder
@@ -429,7 +431,7 @@ function defaults(){
   const n = new Date();
   const meds = {}; Object.keys(MEDS).forEach(k => meds[k] = {on:false, next:'', nextAt:null});
   return {surgery: dateKey(n) + 'T09:00', wake:'07:00', bed:'22:30', breakfast:'08:00', lunch:'12:30', dinner:'18:30',
-          sedation:false, curasept:false, meds, abxDays:7, clinic:'', perio:''};
+          sedation:false, curasept:false, meds, abxDays:7, clinic:(CONFIG.prefill||{}).phone||'', perio:''};
 }
 const activeMeds = () => Object.keys(MEDS).filter(k => S.setup.meds[k] && S.setup.meds[k].on);
 const isFinished = k => !!S.finished[k];
