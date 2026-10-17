@@ -15,10 +15,13 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;600;700&family=Cinzel:wght@600&display=swap">
 <style>
+/* Fonts are self-hosted in fonts/ (SIL Open Font License 1.1), so loading the page sends nothing to Google */
+/* Self-hosted fonts: paste at the top of the existing <style> in index.html */
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:600;font-display:swap;src:url(fonts/cinzel-600-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:600;font-display:swap;src:url(fonts/cinzel-600-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Nunito Sans';font-style:normal;font-weight:300 700;font-display:swap;src:url(fonts/nunito-sans-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:'Nunito Sans';font-style:normal;font-weight:300 700;font-display:swap;src:url(fonts/nunito-sans-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
 /* Layout: one narrow column; sticky day header with progress strip, task cards, fixed three-tab bar at the bottom */
 /* Palette: charcoal ink, slate secondary, muted gold (decorative only), warm orange pill CTAs with dark text, brick-red warnings */
 :root{
@@ -540,10 +543,14 @@ function itemHTML(it, now, key){
     <div class="txt"><div class="t">${esc(it.title)}</div>${it.detail ? `<div class="d">${esc(it.detail)}</div>` : ''}</div><span class="when">${on ? 'done' : whenTxt}</span></li>`;
 }
 
+// Older saved data may have no clinic number: ask for it at the top of Today.
+const addClinicHTML = () => clinicNum() ? '' : `<section class="msg warn" id="addclinic"><p>Add your clinic’s phone number so you can call them quickly.</p>
+  <div class="row"><button type="button" class="btn small" data-act="add-clinic">Open Settings</button></div></section>`;
+
 function todayHTML(now){
   const st = S.setup, s = new Date(st.surgery), n = dayIdx(s, now), dk = dateKey(now);
   if (n < 0){
-    return `<section class="now"><h2>Your plan starts on surgery day</h2><p>Surgery: ${esc(longDay(s))} at ${fmt(s)}. This screen will show what to do and when from then on.</p></section>
+    return addClinicHTML() + `<section class="now"><h2>Your plan starts on surgery day</h2><p>Surgery: ${esc(longDay(s))} at ${fmt(s)}. This screen will show what to do and when from then on.</p></section>
       ${medRemindHTML(now)}${calHTML()}`;
   }
   const tasks = n <= PLAN_DAYS ? tasksFor(st, S, now, CONFIG) : [];
@@ -556,7 +563,7 @@ function todayHTML(now){
   const nextUp = later[0];
   const doseToday = activeMeds().flatMap(k => (S.doses[k]||[]).map(iso => ({k, t:new Date(iso)}))).filter(x => sameDay(x.t, now)).sort((a,b) => a.t - b.t);
 
-  let h = `<section class="now" aria-labelledby="nowh"><h2 id="nowh">Now</h2>`;
+  let h = addClinicHTML() + `<section class="now" aria-labelledby="nowh"><h2 id="nowh">Now</h2>`;
   h += nowList.length ? `<ul class="list">${nowList.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul>`
     : `<p class="empty">Nothing due right now.${nextUp ? ' Next: ' + esc(nextUp.title) + ' at ' + fmt(nextUp.t) + '.' : ''}</p>`;
   h += `</section>` + medRemindHTML(now);
@@ -748,7 +755,9 @@ function setupHTML(){
     meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : ''))}
       ${med.kind === 'prn' || !CONFIG.medTiming ? '' : `<div class="f" id="mf-${k}" ${m.on?'':'hidden'}><label for="mt-${k}">Next dose due at</label><input type="time" id="mt-${k}" value="${esc(m.next||'')}"></div>`}</div>`;
   }
-  const phones = (P.phone ? '' : f('s-clinic','Clinic phone','tel',st.clinic)) + (P.mobile ? '' : f('s-perio','Periodontist mobile','tel',st.perio));
+  // Clinic phone is required (it feeds the call links); the periodontist mobile stays optional.
+  const clinicF = `<div class="f"><label for="s-clinic">Clinic phone (needed to call the clinic)</label><input type="tel" id="s-clinic" value="${esc(st.clinic)}" autocomplete="tel" required aria-required="true" aria-describedby="clinic-err"><div id="clinic-err" class="msg warn" role="alert" hidden></div></div>`;
+  const phones = (P.phone ? '' : clinicF) + (P.mobile ? '' : f('s-perio','Periodontist mobile (optional)','tel',st.perio));
   return `<div class="intro">${first ? '<h1>Let’s set up your plan</h1><p class="sub">About 30 seconds. You can change any of this later in Settings.</p>' : '<h1>Settings</h1>'}</div>
   <form id="setup" novalidate>
     <fieldset><legend>Surgery</legend>${f('s-surgery','Surgery date and time','datetime-local',st.surgery)}
@@ -775,10 +784,15 @@ function wireSetup(){
   form.addEventListener('submit', e => {
     e.preventDefault();
     const v = id => { const el = $('#'+id); return el ? el.value.trim() : ''; };
-    const err = $('#setup-err');
+    const err = $('#setup-err'), cel = $('#s-clinic'), cerr = $('#clinic-err');
+    err.hidden = true; if (cerr){ cerr.hidden = true; cel.removeAttribute('aria-invalid'); }
     const surg = v('s-surgery');
     if (!surg || isNaN(new Date(surg))){ err.textContent = 'Please enter your surgery date and time.'; err.hidden = false; return; }
     for (const id of ['s-wake','s-bed','s-b','s-l','s-d']) if (!v(id)){ err.textContent = 'Please fill in all the times in “Your day”.'; err.hidden = false; return; }
+    if (cel && v('s-clinic').replace(/\D/g,'').length < 7){
+      cerr.textContent = 'Please enter your clinic’s phone number (at least 7 digits). You’ll need it to call them quickly.'; cerr.hidden = false;
+      cel.setAttribute('aria-invalid','true'); cel.focus({preventScroll:true}); cel.scrollIntoView({block:'center'}); return;
+    }
     const old = S.setup || defaults(), now = appNow();
     const base = new Date(Math.max(now, new Date(surg)));
     const meds = {};
@@ -805,6 +819,7 @@ document.addEventListener('click', e => {
   if (act === 'reset-no'){ flash = {}; render(); return; }
   if (act === 'reset-yes'){ S = blank(); try { localStorage.removeItem(KEY); } catch(e) {} flash = {}; previewDay = null; tab = 'setup'; render(); window.scrollTo(0,0); return; }
   if (act === 'tab'){ tab = arg; flash = {}; render(); window.scrollTo(0,0); return; }
+  if (act === 'add-clinic'){ tab = 'setup'; flash = {}; render(); const el = $('#s-clinic'); if (el){ el.focus({preventScroll:true}); el.scrollIntoView({block:'center'}); } return; }
   if (act === 'tick'){ if (S.ticks[arg]) delete S.ticks[arg]; else S.ticks[arg] = now.toISOString(); save(); render(); return; }
   if (act === 'take' || act === 'take-force'){
     if (CONFIG.medTiming){
