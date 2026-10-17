@@ -448,9 +448,10 @@ const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-line
 const PRIVACY = 'This is a trial app. Everything you enter stays on this phone. Nothing is sent anywhere.';
 
 function defaults(){
-  const n = new Date();
+  // Surgery time starts at 2 hours before now, rounded to the nearest hour (most patients set up on the way home).
+  const n = new Date(Date.now() - 2*H + 30*60000); n.setMinutes(0, 0, 0);
   const meds = {}; Object.keys(MEDS).forEach(k => meds[k] = {on:false, next:'', nextAt:null});
-  return {surgery: dateKey(n) + 'T09:00', wake:'07:00', bed:'22:30', breakfast:'08:00', lunch:'12:30', dinner:'18:30',
+  return {surgery: dateKey(n) + 'T' + String(n.getHours()).padStart(2,'0') + ':00', wake:'07:00', bed:'22:30', breakfast:'08:00', lunch:'12:30', dinner:'18:30',
           sedation:false, curasept:false, meds, abxDays:7, clinic:(CONFIG.prefill||{}).phone||'', perio:''};
 }
 const activeMeds = () => Object.keys(MEDS).filter(k => S.setup.meds[k] && S.setup.meds[k].on);
