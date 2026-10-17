@@ -167,6 +167,13 @@ a.gc{color:var(--cta-ink);font-size:14px;font-weight:700;text-decoration:underli
 .tae label{font-weight:700;font-size:15px}
 .item .full{grid-column:1/-1;display:grid;gap:8px;margin-top:-8px;min-width:0}
 .item .full>.linkbtn{justify-self:end}
+/* collapsed groups: "Every day" rules on Today, meal and sleep times in Setup */
+.fold summary{list-style:none;min-height:44px;display:flex;align-items:center;gap:8px;padding:6px 2px;color:var(--accent);font-weight:700;cursor:pointer}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary::before{content:'';flex:none;width:0;height:0;border-style:solid;border-width:6px 0 6px 9px;border-color:transparent transparent transparent currentColor;transition:transform .15s}
+.fold[open] summary::before{transform:rotate(90deg)}
+.fold summary small{display:block;color:var(--muted);font-weight:400;font-size:14px}
+.fold[open] summary{margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -442,7 +449,7 @@ const telHref = num => 'tel:' + esc(String(num).replace(/[^\d+]/g,''));
 const longDay = d => d.toLocaleDateString(undefined, {weekday:'short', day:'numeric', month:'short'});
 const whenStr = (d, now) => sameDay(d, now) ? fmt(d) : (sameDay(d, addDays(midnight(now),1)) ? 'tomorrow ' + fmt(d) : longDay(d) + ' ' + fmt(d));
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-const PRIVACY = 'Everything you enter stays on this phone. Nothing is sent anywhere.';
+const PRIVACY = 'This is a trial app. Everything you enter stays on this phone. Nothing is sent anywhere.';
 
 function defaults(){
   const n = new Date();
@@ -543,6 +550,8 @@ function renderTop(now){
     <div class="strip" role="img" aria-label="Day ${Math.max(0,Math.min(n,PLAN_DAYS))} of 14">${strip}</div>`;
 }
 
+// [text, class, firstDay]. firstDay marks a standing rule: shown in the list on the day it starts,
+// then inside the closed "Every day" fold on the days after.
 function dayNotes(n, s, now){
   const st = S.setup, out = [];
   if (n === 0) out.push(['Go home and rest.'], ['While numb, don’t bite your lips or tongue and don’t push the dressing.']);
@@ -550,13 +559,19 @@ function dayNotes(n, s, now){
     out.push(['After sedation, until ' + whenStr(new Date(s.getTime()+24*H), now) + ': don’t drive, use heavy machinery, sign legal documents or look after children.', 'warn']);
   if (now < new Date(s.getTime() + 48*H) && n >= 0) out.push(['No smoking and no alcohol until ' + whenStr(new Date(s.getTime()+48*H), now) + ' (first 48 hours).', 'warn']);
   if (n === 1) out.push(['You can return to work.']);
-  if (n >= 1 && n < CONFIG.graftBrushDay) out.push(['Brush and floss the areas away from the surgery as normal.']);
+  if (n >= 1 && n < CONFIG.graftBrushDay) out.push(['Brush and floss the areas away from the surgery as normal.', '', 1]);
   if (n === 3) out.push(['Swelling often peaks today. Ice packs help.']);
   if (n >= 0 && n <= STRENUOUS_DAYS) out.push(['No strenuous physical activity (days 0–' + STRENUOUS_DAYS + ').']);
-  if (n >= CONFIG.graftBrushDay) out.push([BRUSH_TXT]);
+  if (n >= CONFIG.graftBrushDay) out.push([BRUSH_TXT, '', CONFIG.graftBrushDay]);
   if (S.setup.meds.metronidazole && S.setup.meds.metronidazole.on && !isFinished('metronidazole')) out.push(['No alcohol while taking metronidazole.', 'warn']);
-  out.push(['Avoid clenching or grinding your teeth.']);
+  out.push(['Avoid clenching or grinding your teeth.', '', 0]);
   return out;
+}
+function notesHTML(n, s, now){
+  const all = dayNotes(n, s, now), daily = all.filter(x => x[2] != null && n > x[2]), today = all.filter(x => !daily.includes(x));
+  const li = ([t,c]) => `<li class="${c||''}">${esc(t)}</li>`;
+  return (today.length ? `<ul class="notes" id="notes-today">${today.map(li).join('')}</ul>` : '') +
+    (daily.length ? `<details class="fold" id="everyday"><summary>Every day (${daily.length})</summary><ul class="notes">${daily.map(li).join('')}</ul></details>` : '');
 }
 function comingUp(n, s){
   const st = S.setup, t = n + 1, R = CONFIG.rinseDays, m = {};
@@ -619,6 +634,9 @@ function todayHTML(now){
   tasks.forEach(it => { if (S.ticks[keyOf(it)]) done.push(it); else (it.t <= now ? nowList : later).push(it); });
   meds.forEach(it => (it.due ? nowList : later).push(it));
   nowList.sort((a,b) => a.t - b.t); later.sort((a,b) => a.t - b.t);
+  // Salt-water rinse how-to once a day: as a line under the first rinse still to do; other rinses show title + time only.
+  const firstRinse = [...nowList, ...later].find(it => /^rinse-/.test(it.id || ''));
+  [...nowList, ...later, ...done].forEach(it => { if (/^rinse-/.test(it.id || '')) it.detail = it === firstRinse ? RINSE : ''; });
   const nextUp = later[0];
   const doseToday = activeMeds().flatMap(k => (S.doses[k]||[]).map(iso => ({k, t:new Date(iso)}))).filter(x => sameDay(x.t, now)).sort((a,b) => a.t - b.t);
 
@@ -633,7 +651,7 @@ function todayHTML(now){
 
   if (later.length) h += `<section><h2 class="label">Later today</h2><ul class="list">${later.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul></section>`;
 
-  h += `<section><h2 class="label">Remember today</h2><ul class="notes">${dayNotes(n, s, now).map(([t,c]) => `<li class="${c||''}">${esc(t)}</li>`).join('')}</ul>`;
+  h += `<section><h2 class="label">Remember today</h2>${notesHTML(n, s, now)}`;
   if (n <= PLAN_DAYS) h += `<p class="coming"><b>Coming up tomorrow:</b> ${esc(comingUp(n, s))}</p>`;
   h += `</section>`;
 
@@ -796,8 +814,7 @@ function phoneHTML(label, num, id){
 function helpHTML(){
   return `<section class="help"><h2 class="label">Call the clinic</h2>
       ${P.name ? `<p class="prac">${esc(P.name)}</p>` : ''}
-      ${phoneHTML('Clinic', clinicNum(), 'ph-clinic')}${phoneHTML('Periodontist mobile', perioNum(), 'ph-perio')}
-      <p><b>If in doubt, call your clinic.</b></p></section>
+      ${phoneHTML('Clinic', clinicNum(), 'ph-clinic')}${perioNum() ? phoneHTML('Periodontist mobile', perioNum(), 'ph-perio') : ''}</section>
     <section class="card help"><h3>Bleeding</h3><p>Slow oozing for several hours is normal.</p>
       <p>If it is heavy:</p><ol><li>Press damp gauze or a damp tea bag on the area for 30 minutes. Repeat if needed.</li><li>Hold an ice pack against the cheek.</li><li>If it continues, call the clinic.</li></ol></section>
     <section class="card help"><h3>Food</h3><p>Blended or liquid food: soups, smoothies, Complan, Nutriment.</p>
@@ -805,8 +822,8 @@ function helpHTML(){
       <p>Avoid refined sugar and spicy food.</p><p>Applesauce helps with nausea on antibiotics.</p></section>
     <section class="card help"><h3>Dressing or stitches come loose</h3><p>Not a problem unless there is pain or heavy bleeding.</p></section>
     <section class="foot"><p>Your sheet gives two lengths for two steps. This app uses: salt rinses for ${CONFIG.rinseDays} days, and brushing the graft area from day ${CONFIG.graftBrushDay}. Please check with your periodontist.</p>
-      <p>This app is a reminder aid based on your periodontist's instruction sheet. Always follow your periodontist's advice.</p>
-      <p class="privacy">${PRIVACY}</p></section>`;
+      <p>This app is a reminder aid based on your periodontist's instruction sheet.</p>
+      <p class="privacy" id="help-privacy">${PRIVACY}</p></section>`;
 }
 
 function setupHTML(){
@@ -826,13 +843,14 @@ function setupHTML(){
   <form id="setup" novalidate>
     <fieldset><legend>Surgery</legend>${f('s-surgery','Surgery date and time','datetime-local',st.surgery)}
       ${ck('s-sed','I had sedation (pills or IV)',st.sedation)}${ck('s-cura','I was given Curasept mouthwash',st.curasept)}</fieldset>
-    <fieldset><legend>Your day</legend><div class="grid2">${f('s-wake','Wake-up time','time',st.wake)}${f('s-bed','Bedtime','time',st.bed)}</div>
-      <div class="grid3">${f('s-b','Breakfast','time',st.breakfast)}${f('s-l','Lunch','time',st.lunch)}${f('s-d','Dinner','time',st.dinner)}</div></fieldset>
     <fieldset><legend>Medicines you were given</legend>${meds}
       ${f('s-abx','Antibiotic course length (days)','number',st.abxDays)}</fieldset>
+    <details class="fold" id="times"><summary><span>Change meal and sleep times (optional)<small id="times-sum">${esc(timesSummary(st))}</small></span></summary>
+      <fieldset><legend>Your day</legend><div class="grid3">${f('s-b','Breakfast','time',st.breakfast)}${f('s-l','Lunch','time',st.lunch)}${f('s-d','Dinner','time',st.dinner)}</div>
+      <div class="grid2">${f('s-wake','Wake-up time','time',st.wake)}${f('s-bed','Bedtime','time',st.bed)}</div></fieldset></details>
     ${phones ? `<fieldset><legend>Phone numbers</legend>${phones}</fieldset>` : ''}
     <div id="setup-err" class="msg warn" role="alert" hidden></div>
-    <p class="consent">This is a trial app. Your data stays on your phone.</p>
+    <p class="consent" id="setup-privacy">${PRIVACY}</p>
     <button type="submit" class="btn wide">${first ? 'Start my plan' : 'Save'}</button>
     ${first ? '' : '<button type="button" class="btn line wide" data-act="tab:today">Cancel</button>'}
   </form>
@@ -840,12 +858,15 @@ function setupHTML(){
   ${first ? '' : (flash.reset
     ? `<div class="msg warn" role="alert"><p>This erases your plan, ticks and medicine log on this phone. You will start setup again.</p>
         <div class="row"><button type="button" class="btn small" data-act="reset-yes">Yes, start over</button><button type="button" class="btn small line" data-act="reset-no">Keep my plan</button></div></div>`
-    : `<button type="button" class="btn line wide" data-act="reset">Start over</button>`)}
-  <p class="privacy">${PRIVACY}</p>`;
+    : `<button type="button" class="btn line wide" data-act="reset">Start over</button>`)}`;
 }
+// Summary line of the closed "meal and sleep times" group in Setup.
+const timesSummary = t => 'Breakfast ' + t.breakfast + ' · Lunch ' + t.lunch + ' · Dinner ' + t.dinner + ' · Wake ' + t.wake + ' · Sleep ' + t.bed;
 function wireSetup(){
   const form = $('#setup');
   Object.keys(MEDS).forEach(k => { const c = $('#m-'+k), fb = $('#mf-'+k); if (c && fb) c.addEventListener('change', () => { fb.hidden = !c.checked; }); });
+  $('#times').addEventListener('input', () => { const v = id => $('#'+id).value || '--:--';
+    $('#times-sum').textContent = timesSummary({breakfast:v('s-b'), lunch:v('s-l'), dinner:v('s-d'), wake:v('s-wake'), bed:v('s-bed')}); });
   form.addEventListener('submit', e => {
     e.preventDefault();
     const v = id => { const el = $('#'+id); return el ? el.value.trim() : ''; };
@@ -853,7 +874,8 @@ function wireSetup(){
     err.hidden = true; if (cerr){ cerr.hidden = true; cel.removeAttribute('aria-invalid'); }
     const surg = v('s-surgery');
     if (!surg || isNaN(new Date(surg))){ err.textContent = 'Please enter your surgery date and time.'; err.hidden = false; return; }
-    for (const id of ['s-wake','s-bed','s-b','s-l','s-d']) if (!v(id)){ err.textContent = 'Please fill in all the times in “Your day”.'; err.hidden = false; return; }
+    for (const id of ['s-b','s-l','s-d','s-wake','s-bed']) if (!v(id)){   // open the times group so the empty field can be seen
+      err.textContent = 'Please fill in all the meal and sleep times.'; err.hidden = false; $('#times').open = true; $('#'+id).focus(); return; }
     if (cel && v('s-clinic').replace(/\D/g,'').length < 7){
       cerr.textContent = 'Please enter your clinic’s phone number (at least 7 digits). You’ll need it to call them quickly.'; cerr.hidden = false;
       cel.setAttribute('aria-invalid','true'); cel.focus({preventScroll:true}); cel.scrollIntoView({block:'center'}); return;
