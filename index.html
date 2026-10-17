@@ -78,7 +78,9 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .btn.ghost{background:var(--accent-soft);color:var(--ink)}
 .btn.line{background:transparent;border:2px solid var(--line);color:var(--ink)}
 .btn.wide{width:100%}
-.eat{width:100%;min-height:64px;font-size:19px;border-radius:14px}
+.eatbox{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.eat{width:100%;min-height:52px;font-size:18px;border-radius:14px}
+.eathint{margin:6px 0 0;font-size:15px;color:var(--muted)}
 .msg{background:var(--accent-soft);border-radius:12px;padding:12px 14px;display:grid;gap:6px}
 .msg.warn{background:var(--warn-soft)}
 .notes{list-style:none;margin:0;padding:0;display:grid;gap:6px}
@@ -648,13 +650,13 @@ function todayHTML(now){
   let h = addClinicHTML() + `<section class="now" aria-labelledby="nowh"><h2 id="nowh">Now</h2>`;
   h += nowList.length ? `<ul class="list">${nowList.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul>`
     : `<p class="empty">Nothing due right now.${nextUp ? ' Next: ' + esc(nextUp.title) + ' at ' + fmt(nextUp.t) + '.' : ''}</p>`;
-  h += `</section>` + medRemindHTML(now);
-
-  if (n >= 1 && n <= CONFIG.rinseDays){   // only matters while salt-water rinses are due
-    h += `<section><button type="button" class="btn eat" data-act="eat">I’ve just eaten</button>`;
+  if (n >= 1 && n <= CONFIG.rinseDays){   // only matters while salt-water rinses are due; sits with the rinses it moves
+    h += `<div class="eatbox"><button type="button" class="btn line eat" data-act="eat">I’ve just eaten</button>
+      <p class="eathint">Ate at a different time, or had a snack? Tap this so your rinse reminder matches.</p>`;
     if (flash.eat) h += `<div class="msg" role="status">${flash.eat}</div>`;
-    h += `</section>`;
+    h += `</div>`;
   }
+  h += `</section>` + medRemindHTML(now);
 
   if (later.length) h += `<section><h2 class="label">Later today</h2><ul class="list">${later.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul></section>`;
 
