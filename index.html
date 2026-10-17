@@ -139,6 +139,13 @@ body{margin:0;overflow-x:hidden}
 .calsub{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:6px}
 .survey a{color:var(--accent-ink)}
 .remind{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.medrem{background:var(--accent-soft);border:2px solid transparent}
+.medrem.miss{background:var(--warn-soft);border-color:var(--warn)}
+.medrem h2{font-family:var(--display);font-weight:600;font-size:22px}
+.mr{display:grid;gap:8px}
+.medrem .msg{background:var(--surface)}
+.mr+.mr{border-top:1px solid var(--line);padding-top:10px}
+.callout{border:2px solid var(--warn)}
 </style>
 </head>
 <body>
@@ -372,9 +379,10 @@ const buildDoseICS = (k, t, opts) => icsDoc([doseEvent(k, t)], opts);
 /*PURE-END*/
 
 const KEY = 'graftRecovery.v1';
-const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}});
+const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}, reminded:{}});
 let S = blank();
 try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(blank(), JSON.parse(raw)); } catch(e) {}
+if (!S.reminded || typeof S.reminded !== 'object') S.reminded = {};   // older saved data
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 
 const P = CONFIG.practice || {};
@@ -423,6 +431,14 @@ function defaults(){
 }
 const activeMeds = () => Object.keys(MEDS).filter(k => S.setup.meds[k] && S.setup.meds[k].on);
 const isFinished = k => !!S.finished[k];
+// A calendar reminder was added for exactly this next-dose time (S.reminded: medKey -> ISO).
+const isReminded = (k, nd) => !!nd && S.reminded[k] === nd.toISOString();
+function markReminded(k){
+  const nd = medStart(S.setup, S, k);
+  if (!nd || nd <= appNow()) return null;
+  S.reminded[k] = nd.toISOString(); save(); return nd;
+}
+const gcalDose = (k, nd) => { const ev = doseEvent(k, nd); return gcalURL(nd, ev.mins, ev.title, ev.details, 1); };
 
 /* ---------- rendering ---------- */
 function render(){
@@ -522,7 +538,7 @@ function todayHTML(now){
   const st = S.setup, s = new Date(st.surgery), n = dayIdx(s, now), dk = dateKey(now);
   if (n < 0){
     return `<section class="now"><h2>Your plan starts on surgery day</h2><p>Surgery: ${esc(longDay(s))} at ${fmt(s)}. This screen will show what to do and when from then on.</p></section>
-      ${calHTML()}`;
+      ${medRemindHTML(now)}${calHTML()}`;
   }
   const tasks = n <= PLAN_DAYS ? tasksFor(st, S, now, CONFIG) : [];
   const meds = medItems(now);
@@ -537,7 +553,7 @@ function todayHTML(now){
   let h = `<section class="now" aria-labelledby="nowh"><h2 id="nowh">Now</h2>`;
   h += nowList.length ? `<ul class="list">${nowList.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul>`
     : `<p class="empty">Nothing due right now.${nextUp ? ' Next: ' + esc(nextUp.title) + ' at ' + fmt(nextUp.t) + '.' : ''}</p>`;
-  h += `</section>`;
+  h += `</section>` + medRemindHTML(now);
 
   h += `<section><button type="button" class="btn eat" data-act="eat">I’ve just eaten</button>`;
   if (flash.eat) h += `<div class="msg" role="status">${flash.eat}</div>`;
@@ -560,16 +576,42 @@ function todayHTML(now){
   return h + calHTML();
 }
 
+// Today: one prominent box listing each scheduled medicine's next-dose reminder (medTiming only).
+function medRemindHTML(now){
+  if (!CONFIG.medTiming) return '';
+  const rows = []; let miss = false;
+  for (const k of activeMeds()){
+    const med = MEDS[k];
+    if (med.kind === 'prn' || isFinished(k)) continue;
+    const nd = medStart(S.setup, S, k);
+    if (!nd) continue;
+    const name = esc(med.name), w = esc(whenStr(nd, now));
+    if (nd <= now){ rows.push(`<div class="mr" data-med="${k}"><p><b>${name}</b>: take your dose first, then add the next reminder.</p></div>`); continue; }
+    const dmsg = flash.dose && flash.dose.k === k ? `<div class="msg" role="status">${esc(flash.dose.txt)}</div>` : '';
+    if (isReminded(k, nd)){ rows.push(`<div class="mr" data-med="${k}"><p><b>✓ ${name} reminder set for ${w}</b></p>${dmsg}</div>`); continue; }
+    miss = true;
+    const last = (S.doses[k]||[]).slice(-1)[0];
+    rows.push(`<div class="mr" data-med="${k}">${flash.taken === k && last ? `<div class="msg" role="status"><p>Taken at ${fmt(new Date(last))}. Next dose not before ${w}. Add a reminder so you don’t miss it.</p></div>` : ''}
+      <p><b>${name}</b>: next dose ${w}. Not in your calendar yet.</p>
+      <button type="button" class="btn wide" data-act="dose-ics:${k}">Add ${name} reminder to my calendar</button>
+      <div class="row"><a class="btn small line" href="${esc(gcalDose(k, nd))}" target="_blank" rel="noopener" data-act="gcal:${k}">Google Calendar</a></div>${dmsg}</div>`);
+  }
+  if (!rows.length) return '';
+  return `<section class="card medrem ${miss ? 'miss' : ''}" id="medrem" aria-labelledby="medremh"><h2 id="medremh">Medicine reminders</h2>${rows.join('')}
+    <p class="sub">Medicine reminders are added one dose at a time, so they always follow when you really took your last dose.</p></section>`;
+}
+
 function calHTML(){
   const L = calLinks(S.setup, CONFIG);
   return `<section id="calsec"><h2 class="label">Phone reminders</h2>
-    <p>Add these to your phone’s calendar and it will remind you even when this app is closed.</p>
+    <p>${CONFIG.medTiming ? 'Add your rinse and recovery reminders to your phone’s calendar. It will remind you even when this app is closed.' : 'Add these to your phone’s calendar and it will remind you even when this app is closed.'}</p>
+    ${CONFIG.medTiming ? '<div class="msg warn callout" id="calmed"><p><b>Medicines are not in this file.</b> After each dose, add a reminder for the next one from the Medicine reminders box on Today.</p></div>' : ''}
     <button type="button" class="btn wide" data-act="ics">Add all reminders to my calendar</button>
     <p class="sub">On iPhone, the calendar file opens with an “Add All” button. Tap it.</p>
     ${flash.ics ? `<div class="msg" role="status">${esc(flash.ics)}</div>` : ''}
     <h3 class="calsub">Or add one at a time to Google Calendar</h3>
     <ul class="list">${L.map(x => `<li class="item cal"><div class="txt"><div class="t">${esc(x.label)}</div><div class="d">${esc(x.when)}</div></div><a class="btn small line" href="${esc(x.url)}" target="_blank" rel="noopener">Add</a></li>`).join('')}</ul>
-    ${CONFIG.medTiming ? '<p class="sub">Medicine reminders are not in this file. Add them one dose at a time on the Medicines tab, after each dose, so the time follows when you really took it.</p>' : ''}</section>`;
+    </section>`;
 }
 
 function saveICS(text, name){
@@ -591,6 +633,7 @@ function downloadDose(k){
   if (!nd || nd <= now){ render(); return; }
   const name = 'next-dose-' + k + '.ics';
   saveICS(buildDoseICS(k, nd, {now: new Date()}).text, name);
+  markReminded(k);
   flash.dose = {k, txt:'Reminder for ' + whenStr(nd, now) + ' is in the file ' + name + '. Open it to add it to your calendar.'};
   render();
 }
@@ -644,10 +687,10 @@ function medsHTML(now){
         h += `<p class="due ${late?'late':''}">${nd <= now ? (late ? 'Overdue since ' + fmt(nd) : 'Due now') : 'Next due ' + esc(whenStr(nd, now))}</p>`;
         if (late) h += `<p class="sub">Take it now if you still need it, then the next one is worked out from when you take it. Never take two doses at once.</p>`;
         if (nd > now){
-          const ev = doseEvent(k, nd);
+          const done = isReminded(k, nd);
           if (flash.taken === k && last) h += `<div class="msg" role="status"><p>Taken at ${fmt(last)}. Next dose not before ${esc(whenStr(nd, now))}. Add a reminder so you don’t miss it.</p></div>`;
-          h += `<div class="remind"><p><b>Remind me at ${esc(whenStr(nd, now))}</b></p><div class="row"><button type="button" class="btn small" data-act="dose-ics:${k}">Add to my calendar</button>
-            <a class="btn small line" href="${esc(gcalURL(nd,ev.mins,ev.title,ev.details,1))}" target="_blank" rel="noopener">Google Calendar</a></div>
+          h += `<div class="remind"><p><b>${done ? '✓ Reminder set for ' : 'Remind me at '}${esc(whenStr(nd, now))}</b></p><div class="row"><button type="button" class="btn small ${done ? 'line' : ''}" data-act="dose-ics:${k}">${done ? 'Add again' : 'Add to my calendar'}</button>
+            <a class="btn small line" href="${esc(gcalDose(k, nd))}" target="_blank" rel="noopener" data-act="gcal:${k}">Google Calendar</a></div>
             ${flash.dose && flash.dose.k === k ? `<div class="msg" role="status">${esc(flash.dose.txt)}</div>` : ''}</div>`;
         }
       }
@@ -750,6 +793,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const [act, arg] = b.dataset.act.split(/:(.*)/s);
   const now = appNow();
+  if (act === 'gcal'){ markReminded(arg); setTimeout(render, 0); return; }   // let the link open first, then show the tick
   if (act !== 'dose-ics'){ flash.taken = null; flash.dose = null; }
   if (act === 'reset'){ flash.reset = true; render(); return; }
   if (act === 'reset-no'){ flash = {}; render(); return; }
@@ -762,8 +806,7 @@ document.addEventListener('click', e => {
       if (act === 'take' && nd && nd > addMin(now, 5) && (S.doses[arg]||[]).length && MEDS[arg].kind !== 'prn'){ flash.early = arg; tab = 'meds'; render(); return; }
       if (act === 'take' && nd && nd > now && MEDS[arg].kind === 'prn'){ flash.early = arg; render(); return; }
     }
-    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; flash.taken = arg;
-    if (CONFIG.medTiming && MEDS[arg].kind !== 'prn') tab = 'meds';   // show the next-dose reminder prompt
+    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; flash.taken = arg;   // stay on this tab: Today and Medicines both show the next-dose reminder prompt
     save(); render(); return;
   }
   if (act === 'early-no'){ flash.early = null; render(); return; }
