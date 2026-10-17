@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Graft Recovery Companion</title>
 <meta name="description" content="Day-by-day reminders for the two weeks after gum graft surgery, based on your periodontist's instruction sheet.">
-<meta name="theme-color" content="#F7F6F2" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1E2226" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F7F6F2">
+<meta name="color-scheme" content="light only">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Recovery">
@@ -33,16 +33,7 @@
   --body:"Nunito Sans", "Avenir Next", Avenir, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --serif:"Cinzel", "Trajan Pro", Georgia, serif;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#1E2226; --surface:#2A2F35; --ink:#ECEAE4; --muted:#A9B3BB; --line:#3B4249; --field:#79848E;
-  --accent:#D8C793; --accent-ink:#1E2226; --accent-soft:#38352B; --gold:#C1AF7D;
-  --cta:#E8A25A; --cta-ink:#1E2226; --slate:#56636E; --slate-ink:#FFFFFF;
-  --warn:#F0A08F; --warn-soft:#3D2723; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#1E2226; --surface:#2A2F35; --ink:#ECEAE4; --muted:#A9B3BB; --line:#3B4249; --field:#79848E;
-  --accent:#D8C793; --accent-ink:#1E2226; --accent-soft:#38352B; --gold:#C1AF7D;
-  --cta:#E8A25A; --cta-ink:#1E2226; --slate:#56636E; --slate-ink:#FFFFFF;
-  --warn:#F0A08F; --warn-soft:#3D2723; color-scheme:dark}
+:root{color-scheme:light only}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:18px/1.5 var(--body);-webkit-text-size-adjust:100%}
 .wrap{max-width:560px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(110px + env(safe-area-inset-bottom,0px))}
