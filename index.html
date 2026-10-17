@@ -138,6 +138,7 @@ body{margin:0;overflow-x:hidden}
 .consent{font-size:15px;color:var(--ink);font-weight:700}
 .calsub{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:6px}
 .survey a{color:var(--accent-ink)}
+.remind{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px}
 </style>
 </head>
 <body>
@@ -166,7 +167,8 @@ const CONFIG = {
   practice: { name: '', phone: '', mobile: '' },
 
   // true  = the app works out "next due" times for each medicine, puts doses in
-  //         Today's Now/Later lists, warns about early doses and adds doses to the calendar file.
+  //         Today's Now/Later lists, warns about early doses and offers a calendar reminder
+//         for the next dose, one dose at a time (never a fixed series in the calendar file).
   // false = the Medicines tab only logs "Taken now" / "Last taken"; the patient follows
   //         the timing on their prescription label. No medicine times anywhere.
   medTiming: true,
@@ -197,7 +199,7 @@ const RINSE = 'Gentle rinse: ½ teaspoon of salt in 8 oz (about 240 ml) of warm 
 const CURA = 'Rinse for 60 seconds, 30 minutes before or after toothpaste.';
 const PROBIO = 'Daily for 3 days after finishing antibiotics.';
 const MEALS = [['breakfast','breakfast'],['lunch','lunch'],['dinner','dinner']];
-const PLAN_DAYS = 14, STRENUOUS_DAYS = 7, PAIN_CAL_DAYS = 3;
+const PLAN_DAYS = 14, STRENUOUS_DAYS = 7;
 const H = 36e5, MIN = 6e4;
 
 const pad = n => String(n).padStart(2,'0');
@@ -302,7 +304,8 @@ function calLinks(st, cfg){
   return L;
 }
 
-// Every reminder for the 2-week plan as single events {t, mins, title, details}.
+// Every routine reminder for the 2-week plan as single events {t, mins, title, details}.
+// No medicine doses: a fixed series can't follow late doses, so those are added one at a time (doseEvent).
 function planEvents(st, data, cfg){
   const s = new Date(st.surgery), d0 = midnight(s), W = st.wake, B = st.bed, ev = [];
   const day = n => addDays(d0, n);
@@ -321,20 +324,6 @@ function planEvents(st, data, cfg){
     ev.push({t:addMin(at(day(STRENUOUS_DAYS+1),W),60), mins:15, title:'No-strenuous-activity days are over', details:'The days of no strenuous physical activity (days 0–'+STRENUOUS_DAYS+') are finished.'});
   }
   ev.push({t:addMin(at(day(cfg.graftBrushDay),W),60), mins:15, title:'Gum graft area: gentle brushing can start', details:BRUSH_TXT});
-  if (cfg.medTiming){
-    const fin = data.finished || {};
-    for (const k of Object.keys(MEDS)){
-      const med = MEDS[k], m = st.meds[k];
-      if (!m || !m.on || med.kind === 'prn' || fin[k]) continue;
-      let t = medStart(st, data, k);
-      if (!t) continue;
-      const details = med.notes.join(' ') + (med.kind === 'abx' ? ' ' + ABX_NOTE : '');
-      // Antibiotics: the course length entered at setup. Pain medicine: first 3 days only.
-      const count = med.kind === 'abx' ? (st.abxDays||7) * Math.round(24/med.h) : Infinity;
-      const end = med.kind === 'abx' ? addDays(d0, PLAN_DAYS+1) : addDays(midnight(t), PAIN_CAL_DAYS);
-      for (let i = 0; i < count && t < end; i++){ ev.push({t, mins:10, title:med.name+' '+med.dose, details}); t = nextDue(t, med.h, W, B); }
-    }
-  }
   return ev.sort((a,b) => a.t - b.t);
 }
 
@@ -353,11 +342,16 @@ function icsFold(line){
   out.push(cur);
   return out.join('\r\n');
 }
-// Build the whole calendar file. Times are floating (local wall-clock) so they match the patient's day.
-function buildICS(st, data, cfg, opts){
+// One medicine dose as a single event. The details remind that a late dose moves the next one.
+function doseEvent(k, t){
+  const med = MEDS[k];
+  return {t, mins:10, title:med.name+' '+med.dose, details:med.notes.join(' ') + (med.kind === 'abx' ? ' ' + ABX_NOTE : '') +
+    ' If your last dose was late, wait the full ' + med.h + ' hours from when you took it. Open the app to check the right time. Never take two doses at once.'};
+}
+// Write events as a calendar file. Times are floating (local wall-clock) so they match the patient's day.
+function icsDoc(ev, opts){
   opts = opts || {};
-  const from = opts.from || null, stamp = icsUTC(opts.now || new Date()), seed = opts.seed || Date.now().toString(36);
-  const ev = planEvents(st, data, cfg).filter(e => !from || e.t >= from);
+  const stamp = icsUTC(opts.now || new Date()), seed = opts.seed || Date.now().toString(36);
   const L = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Graft Recovery Companion//Pilot//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Graft recovery'];
   ev.forEach((e,i) => {
     L.push('BEGIN:VEVENT', 'UID:grc-' + seed + '-' + i + '-' + icsStamp(e.t) + '@graft-recovery', 'DTSTAMP:' + stamp,
@@ -368,6 +362,13 @@ function buildICS(st, data, cfg, opts){
   L.push('END:VCALENDAR');
   return {text: L.map(icsFold).join('\r\n') + '\r\n', count: ev.length};
 }
+// The whole plan file (routines and milestones).
+function buildICS(st, data, cfg, opts){
+  const from = (opts && opts.from) || null;
+  return icsDoc(planEvents(st, data, cfg).filter(e => !from || e.t >= from), opts);
+}
+// A single next-dose reminder file.
+const buildDoseICS = (k, t, opts) => icsDoc([doseEvent(k, t)], opts);
 /*PURE-END*/
 
 const KEY = 'graftRecovery.v1';
@@ -568,18 +569,29 @@ function calHTML(){
     ${flash.ics ? `<div class="msg" role="status">${esc(flash.ics)}</div>` : ''}
     <h3 class="calsub">Or add one at a time to Google Calendar</h3>
     <ul class="list">${L.map(x => `<li class="item cal"><div class="txt"><div class="t">${esc(x.label)}</div><div class="d">${esc(x.when)}</div></div><a class="btn small line" href="${esc(x.url)}" target="_blank" rel="noopener">Add</a></li>`).join('')}</ul>
-    ${CONFIG.medTiming ? '<p class="sub">Medicine reminders: on the Medicines tab, use “Add to calendar” after each dose.</p>' : ''}</section>`;
+    ${CONFIG.medTiming ? '<p class="sub">Medicine reminders are not in this file. Add them one dose at a time on the Medicines tab, after each dose, so the time follows when you really took it.</p>' : ''}</section>`;
 }
 
+function saveICS(text, name){
+  const url = URL.createObjectURL(new Blob([text], {type:'text/calendar;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.rel = 'noopener'; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
+}
 function downloadICS(){
   const now = appNow(), r = buildICS(S.setup, S, CONFIG, {from: addMin(now,-1), now: new Date()});
   if (!r.count){ flash.ics = 'There are no reminders left to add.'; render(); return; }
-  const url = URL.createObjectURL(new Blob([r.text], {type:'text/calendar;charset=utf-8'}));
-  const a = document.createElement('a');
-  a.href = url; a.download = 'graft-recovery.ics'; a.rel = 'noopener'; a.style.display = 'none';
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
+  saveICS(r.text, 'graft-recovery.ics');
   flash.ics = r.count + ' reminders are in the file graft-recovery.ics. Open it to add them to your calendar.';
+  render();
+}
+function downloadDose(k){
+  const now = appNow(), nd = medStart(S.setup, S, k);
+  if (!nd || nd <= now){ render(); return; }
+  const name = 'next-dose-' + k + '.ics';
+  saveICS(buildDoseICS(k, nd, {now: new Date()}).text, name);
+  flash.dose = {k, txt:'Reminder for ' + whenStr(nd, now) + ' is in the file ' + name + '. Open it to add it to your calendar.'};
   render();
 }
 
@@ -630,7 +642,14 @@ function medsHTML(now){
       } else {
         const late = nd <= addMin(now,-30);
         h += `<p class="due ${late?'late':''}">${nd <= now ? (late ? 'Overdue since ' + fmt(nd) : 'Due now') : 'Next due ' + esc(whenStr(nd, now))}</p>`;
-        if (nd > now) h += `<p><a class="btn small line" href="${esc(gcalURL(nd,10,med.name+' '+med.dose,med.notes.join(' ')+(med.kind==='abx'?' '+ABX_NOTE:''),1))}" target="_blank" rel="noopener">Add next dose to calendar</a></p>`;
+        if (late) h += `<p class="sub">Take it now if you still need it, then the next one is worked out from when you take it. Never take two doses at once.</p>`;
+        if (nd > now){
+          const ev = doseEvent(k, nd);
+          if (flash.taken === k && last) h += `<div class="msg" role="status"><p>Taken at ${fmt(last)}. Next dose not before ${esc(whenStr(nd, now))}. Add a reminder so you don’t miss it.</p></div>`;
+          h += `<div class="remind"><p><b>Remind me at ${esc(whenStr(nd, now))}</b></p><div class="row"><button type="button" class="btn small" data-act="dose-ics:${k}">Add to my calendar</button>
+            <a class="btn small line" href="${esc(gcalURL(nd,ev.mins,ev.title,ev.details,1))}" target="_blank" rel="noopener">Google Calendar</a></div>
+            ${flash.dose && flash.dose.k === k ? `<div class="msg" role="status">${esc(flash.dose.txt)}</div>` : ''}</div>`;
+        }
       }
       if (last) h += `<p class="sub">Last taken ${esc(whenStr(last, now))}.</p>`;
       if (k === 'paracetamol' || k === 'cocodamol'){
@@ -731,6 +750,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const [act, arg] = b.dataset.act.split(/:(.*)/s);
   const now = appNow();
+  if (act !== 'dose-ics'){ flash.taken = null; flash.dose = null; }
   if (act === 'reset'){ flash.reset = true; render(); return; }
   if (act === 'reset-no'){ flash = {}; render(); return; }
   if (act === 'reset-yes'){ S = blank(); try { localStorage.removeItem(KEY); } catch(e) {} flash = {}; previewDay = null; tab = 'setup'; render(); window.scrollTo(0,0); return; }
@@ -742,7 +762,9 @@ document.addEventListener('click', e => {
       if (act === 'take' && nd && nd > addMin(now, 5) && (S.doses[arg]||[]).length && MEDS[arg].kind !== 'prn'){ flash.early = arg; tab = 'meds'; render(); return; }
       if (act === 'take' && nd && nd > now && MEDS[arg].kind === 'prn'){ flash.early = arg; render(); return; }
     }
-    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; save(); render(); return;
+    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; flash.taken = arg;
+    if (CONFIG.medTiming && MEDS[arg].kind !== 'prn') tab = 'meds';   // show the next-dose reminder prompt
+    save(); render(); return;
   }
   if (act === 'early-no'){ flash.early = null; render(); return; }
   if (act === 'undo'){ (S.doses[arg]||[]).pop(); save(); render(); return; }
@@ -750,6 +772,7 @@ document.addEventListener('click', e => {
   if (act === 'finish-no'){ flash.finish = null; render(); return; }
   if (act === 'finish-yes'){ S.finished[arg] = now.toISOString(); flash.finish = null; save(); render(); return; }
   if (act === 'ics'){ downloadICS(); return; }
+  if (act === 'dose-ics'){ downloadDose(arg); return; }
   if (act === 'eat'){
     S.meals.push(now.toISOString()); S.meals = S.meals.slice(-60); save();
     const n = dayIdx(new Date(S.setup.surgery), now), pain = activeMeds().some(k => MEDS[k].kind === 'pain');
