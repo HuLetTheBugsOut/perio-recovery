@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Graft Recovery Companion</title>
+<meta name="description" content="Day-by-day reminders for the two weeks after gum graft surgery, based on your periodontist's instruction sheet.">
+<meta name="theme-color" content="#EDF2F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1819" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Recovery">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600&display=swap">
+<style>
+/* Layout: one narrow column; sticky day header with progress strip, task cards, fixed three-tab bar at the bottom */
+:root{
+  --bg:#EDF2F1; --surface:#FFFFFF; --ink:#14302E; --muted:#56706C; --line:#D2DFDC;
+  --accent:#11697A; --accent-ink:#FFFFFF; --accent-soft:#DAEBEC;
+  --warn:#8A5300; --warn-soft:#FAEED3;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1819; --surface:#142426; --ink:#E2EDEB; --muted:#97AFAB; --line:#243A3C;
+  --accent:#62C3CF; --accent-ink:#06222A; --accent-soft:#17363A; --warn:#F1C06B; --warn-soft:#352A12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1819; --surface:#142426; --ink:#E2EDEB; --muted:#97AFAB; --line:#243A3C;
+  --accent:#62C3CF; --accent-ink:#06222A; --accent-soft:#17363A; --warn:#F1C06B; --warn-soft:#352A12; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:17px/1.45 var(--body);-webkit-text-size-adjust:100%}
+.wrap{max-width:560px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(110px + env(safe-area-inset-bottom,0px))}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 12px;display:grid;gap:8px}
+.top-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.app{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.day{font-family:var(--display);font-weight:600;font-size:32px;line-height:1.1}
+.day small{font-size:16px;color:var(--muted);font-family:var(--body);font-weight:400;margin-left:6px}
+.linkbtn{background:none;border:0;color:var(--accent);font-weight:700;padding:10px 4px;min-height:44px}
+.strip{display:grid;grid-template-columns:repeat(15,1fr);gap:3px}
+.strip i{height:6px;border-radius:3px;background:var(--line)}
+.strip i.done{background:var(--accent);opacity:.45}
+.strip i.cur{background:var(--accent)}
+main{display:grid;gap:22px;padding-top:6px}
+section{display:grid;gap:10px}
+.label{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.now{background:var(--surface);border:2px solid var(--accent);border-radius:16px;padding:16px;display:grid;gap:12px}
+.now h2{font-family:var(--display);font-weight:600;font-size:22px}
+.empty{color:var(--muted)}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-height:60px}
+.now .item{border-color:var(--line)}
+.item .txt{min-width:0}
+.item .t{font-weight:700}
+.item .d{color:var(--muted);font-size:15px}
+.item .when{font-variant-numeric:tabular-nums;color:var(--muted);font-size:15px;text-align:right;white-space:nowrap}
+.item.late .when{color:var(--warn);font-weight:700}
+.tick{width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);background:transparent;display:grid;place-items:center;padding:0}
+.tick svg{width:22px;height:22px;stroke:var(--accent-ink);opacity:0}
+.tick.on{background:var(--accent)}
+.tick.on svg{opacity:1}
+.done .item{opacity:.7}
+.item.cal{grid-template-columns:1fr auto}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.done .item .t{text-decoration:line-through;text-decoration-thickness:1px}
+.dot{width:44px;height:44px;border-radius:50%;border:2px dashed var(--line)}
+.btn{min-height:52px;border-radius:12px;border:0;padding:12px 18px;font-weight:700;background:var(--accent);color:var(--accent-ink)}
+.btn.small{min-height:44px;padding:8px 14px;font-size:15px}
+.btn.ghost{background:var(--accent-soft);color:var(--ink)}
+.btn.line{background:transparent;border:2px solid var(--line);color:var(--ink)}
+.btn.wide{width:100%}
+.eat{width:100%;min-height:64px;font-size:19px;border-radius:14px}
+.msg{background:var(--accent-soft);border-radius:12px;padding:12px 14px;display:grid;gap:6px}
+.msg.warn{background:var(--warn-soft)}
+.notes{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.notes li{padding:10px 12px;border-left:3px solid var(--line);background:var(--surface);border-radius:0 10px 10px 0}
+.notes li.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.coming{color:var(--muted)}
+.coming b{color:var(--ink)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:10px}
+.card h3{font-family:var(--display);font-weight:600;font-size:21px}
+.due{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.due.late{color:var(--warn)}
+.sub{color:var(--muted);font-size:15px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.small-notes{margin:0;padding-left:18px;display:grid;gap:4px;font-size:15px}
+.phone{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.num{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;user-select:all;-webkit-user-select:all;word-break:break-all}
+.help p+p{margin-top:6px}
+.help ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.foot{font-size:14px;color:var(--muted);display:grid;gap:8px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--surface);border-top:1px solid var(--line);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:8px calc(8px + env(safe-area-inset-bottom,0px))}
+nav.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+nav.tabs button{min-height:52px;border:0;border-radius:12px;background:transparent;font-weight:700;color:var(--muted)}
+nav.tabs button[aria-current="page"]{background:var(--accent-soft);color:var(--ink)}
+form{display:grid;gap:20px}
+fieldset{border:0;margin:0;padding:0;display:grid;gap:12px}
+legend{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0;margin-bottom:10px}
+.f{display:grid;gap:4px}
+.f label{font-weight:700;font-size:15px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+input[type=time],input[type=datetime-local],input[type=tel],input[type=number],input[type=text]{width:100%;min-height:50px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);min-width:0}
+.check{display:flex;gap:12px;align-items:center;min-height:52px;padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.check input{width:24px;height:24px;accent-color:var(--accent);flex:none}
+.check span small{display:block;color:var(--muted);font-size:14px}
+.medset{display:grid;gap:8px}
+.medset .f{padding:0 4px 4px 48px}
+.intro{display:grid;gap:6px}
+.intro h1{font-family:var(--display);font-weight:600;font-size:28px}
+@media (max-width:380px){.grid3{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:no-preference){.tick,.btn{transition:background-color .15s}}
+/* ---- pilot-site additions ---- */
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;overflow-x:hidden}
+.wrap{padding-block:0 calc(150px + env(safe-area-inset-bottom,0px))}
+.top{display:block}
+.topin{display:grid;gap:8px}
+.brand{display:grid;gap:0;min-width:0}
+.prac{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.pv{display:grid;gap:4px;background:var(--warn-soft);border:1px dashed var(--warn);border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:14px}
+.pv label{font-weight:700;color:var(--warn)}
+.pv input{width:100%;accent-color:var(--warn);margin:0}
+.safety{max-width:560px;margin:0 auto 6px;font-size:13px;line-height:1.35;color:var(--muted);text-align:center}
+.safety a{color:var(--accent);font-weight:700;white-space:nowrap}
+.privacy{font-size:14px;color:var(--muted)}
+.consent{font-size:15px;color:var(--ink);font-weight:700}
+.calsub{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:6px}
+.survey a{color:var(--accent-ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top" id="hdr"><div id="pv" class="pv" hidden></div><div id="top" class="topin"></div></header>
+  <main id="main" aria-live="polite"></main>
+</div>
+<nav class="tabs" id="tabs" aria-label="Sections">
+  <p class="safety" id="safety"></p>
+  <div id="tabbtns">
+  <button type="button" data-act="tab:today">Today</button>
+  <button type="button" data-act="tab:meds">Medicines</button>
+  <button type="button" data-act="tab:help">Help</button>
+  </div>
+</nav>
+
+<script>
+/* =====================================================================
+   CONFIG: the only settings you need to change for a pilot.
+   ===================================================================== */
+const CONFIG = {
+  // Practice details. Leave a value as '' to let the patient type it in at setup.
+  //   name:   shown subtly in the header and on the Help tab.
+  //   phone:  clinic phone. When filled, the "Clinic phone" setup field is hidden.
+  //   mobile: periodontist's mobile. When filled, the "Periodontist mobile" setup field is hidden.
+  practice: { name: '', phone: '', mobile: '' },
+
+  // true  = the app works out "next due" times for each medicine, puts doses in
+  //         Today's Now/Later lists, warns about early doses and adds doses to the calendar file.
+  // false = the Medicines tab only logs "Taken now" / "Last taken"; the patient follows
+  //         the timing on their prescription label. No medicine times anywhere.
+  medTiming: true,
+
+  // Salt-water rinses run on days 1..rinseDays (the sheet says 3-4 days in one place, 7 in another).
+  rinseDays: 7,
+
+  // Day on which gentle brushing of the gum graft area can start (sheet: 1 week general rule, 2 weeks for grafts).
+  graftBrushDay: 14,
+
+  // Link to a feedback survey. When filled, a survey card appears on Today from day 12. '' hides it.
+  surveyUrl: ''
+};
+/* Testers: add ?preview or #preview to the address to get a day slider (day 0-14). */
+
+/*PURE-START*/
+const MEDS = {
+  paracetamol:{name:'Paracetamol',dose:'2 × 500 mg',h:8,kind:'pain',notes:['2 × 500 mg every 8 hours, taken 4 hours after ibuprofen.','Pain medicine is taken after eating.']},
+  ibuprofen:{name:'Ibuprofen',dose:'1 × 400 mg',h:8,kind:'pain',notes:['1 × 400 mg every 8 hours, for at least 3 days.','Pain medicine is taken after eating.']},
+  amoxicillin:{name:'Amoxicillin',dose:'500 mg, 1 capsule',h:8,kind:'abx',notes:['500 mg, 1 capsule 3 times a day until finished.','Can interfere with the contraceptive pill and can cause thrush.']},
+  cocodamol:{name:'Co-codamol',dose:'30/500 mg, 1 tablet',h:6,kind:'pain',notes:['30/500 mg, 1 every 6 hours for pain, taken 4 hours after ibuprofen.','Pain medicine is taken after eating.']},
+  metronidazole:{name:'Metronidazole',dose:'400 mg',h:8,kind:'abx',notes:['400 mg every 8 hours, with food, no alcohol.']},
+  sudafed:{name:'Sudafed',dose:'1 tablet',h:12,kind:'prn',notes:['1 tablet every 12 hours.','For sinus lifts. Only when needed.']},
+  sinex:{name:'Sinex nasal spray',dose:'1–2 sprays',h:6,kind:'prn',notes:['1–2 sprays every 6–8 hours if the nostril feels blocked.','For sinus lifts.']}
+};
+const ABX_NOTE = 'Take until all are finished. Stop and call the clinic or GP if there is a rash, itching or an upset stomach.';
+const RINSE = 'Gentle rinse: ½ teaspoon of salt in 8 oz (about 240 ml) of warm water.';
+const CURA = 'Rinse for 60 seconds, 30 minutes before or after toothpaste.';
+const PROBIO = 'Daily for 3 days after finishing antibiotics.';
+const MEALS = [['breakfast','breakfast'],['lunch','lunch'],['dinner','dinner']];
+const PLAN_DAYS = 14, STRENUOUS_DAYS = 7, PAIN_CAL_DAYS = 3;
+const H = 36e5, MIN = 6e4;
+
+const pad = n => String(n).padStart(2,'0');
+const hm = s => { const [a,b] = String(s||'0:0').split(':').map(Number); return (a||0)*60 + (b||0); };
+const at = (d,s) => { const m = hm(s); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(m/60), m%60); };
+const addMin = (d,m) => new Date(d.getTime() + m*MIN);
+const addDays = (d,n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n, d.getHours(), d.getMinutes());
+const midnight = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const sameDay = (a,b) => midnight(a).getTime() === midnight(b).getTime();
+const dayIdx = (s,d) => Math.round((midnight(d) - midnight(s)) / 864e5);
+const fmt = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+const dateKey = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+// bedtime for the night that follows day D (handles bedtimes after midnight)
+const bedAt = (D,wake,bed) => hm(bed) < hm(wake) ? at(addDays(D,1),bed) : at(D,bed);
+
+function asleep(d, wake, bed){
+  const m = d.getHours()*60 + d.getMinutes(), w = hm(wake), b = hm(bed);
+  if (b === w) return false;
+  return b > w ? (m >= b || m < w) : (m >= b && m < w);
+}
+// Move a time that falls during sleep to the next wake-up time. Never moves earlier.
+function shiftToWake(d, wake, bed){
+  if (!asleep(d, wake, bed)) return new Date(d);
+  const m = d.getHours()*60 + d.getMinutes();
+  return m < hm(wake) ? at(d, wake) : at(addDays(d,1), wake);
+}
+// Next dose = last dose + full interval, then pushed to wake time if asleep.
+function nextDue(last, hours, wake, bed){ return shiftToWake(new Date(last.getTime() + hours*H), wake, bed); }
+
+// Turn the entered "HH:MM" next-dose time into a real date, relative to setup time / surgery.
+function resolveNext(hhmm, base){
+  if (!hhmm) return null;
+  let t = at(base, hhmm);
+  if (t < addMin(base,-60)) t = addDays(t,1);
+  return t;
+}
+function medStart(st, data, k){
+  const log = (data.doses && data.doses[k]) || [];
+  if (log.length) return nextDue(new Date(log[log.length-1]), MEDS[k].h, st.wake, st.bed);
+  const m = st.meds[k];
+  return m && m.nextAt ? shiftToWake(new Date(m.nextAt), st.wake, st.bed) : null;
+}
+
+// Texts that depend on CONFIG.rinseDays / CONFIG.graftBrushDay.
+const BRUSH_TXT = 'Gum graft area: you can now start gentle brushing there.';
+function endRinseText(cfg){
+  return cfg.rinseDays === STRENUOUS_DAYS
+    ? 'Salt-water rinses (days 1–' + cfg.rinseDays + ') and the days of no strenuous activity (days 0–' + STRENUOUS_DAYS + ') are finished.'
+    : null;
+}
+
+// Routine (non-medicine) tasks for calendar day D.
+function tasksFor(st, data, D, cfg){
+  const s = new Date(st.surgery), n = dayIdx(s, D), out = [];
+  if (n === 0){
+    const t = sameDay(s,D) ? s : at(D, st.wake);
+    out.push({id:'pain0', t, title:'Take pain medicine before the numbness wears off'});
+    out.push({id:'ice0', t, title:'Ice pack on the face', detail:'20 minutes on and 20 minutes off, for the rest of the day.'});
+  }
+  if (n >= 1 && n <= cfg.rinseDays){
+    const meals = (data.meals||[]).map(x => new Date(x)).filter(x => sameDay(x,D)), used = new Set();
+    for (const [k,label] of MEALS){
+      const mt = at(D, st[k]);
+      let t = addMin(mt,15);
+      const i = meals.findIndex((x,j) => !used.has(j) && Math.abs(x - mt) <= 2*H);
+      if (i >= 0){ used.add(i); t = meals[i]; }
+      out.push({id:'rinse-'+k, t, title:'Salt-water rinse after '+label, detail:RINSE});
+    }
+    meals.forEach((x,j) => { if (!used.has(j)) out.push({id:'rinse-'+x.getTime(), t:x, title:'Salt-water rinse after your meal', detail:RINSE}); });
+  }
+  if (st.curasept && n >= 4 && n <= PLAN_DAYS){
+    out.push({id:'cura-am', t:addMin(at(D,st.wake),30), title:'Curasept rinse (morning)', detail:CURA});
+    out.push({id:'cura-pm', t:addMin(bedAt(D,st.wake,st.bed),-30), title:'Curasept rinse (before bed)', detail:CURA});
+  }
+  const fin = data.finished || {};
+  if (Object.values(fin).some(iso => { const k = dayIdx(new Date(iso), D); return k >= 0 && k <= 2; }))
+    out.push({id:'probiotic', t:at(D,st.breakfast), title:'Probiotic drink or yogurt', detail:PROBIO});
+  return out.sort((a,b) => a.t - b.t);
+}
+
+// Google Calendar "add event" links (one at a time).
+const gStamp = d => d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + 'T' + pad(d.getHours()) + pad(d.getMinutes()) + '00';
+function gcalURL(t, mins, title, details, count){
+  let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch(e) {}
+  const q = new URLSearchParams({action:'TEMPLATE', text:title, dates:gStamp(t)+'/'+gStamp(addMin(t,mins||15)), details:details||''});
+  if (tz) q.set('ctz', tz);
+  if (count > 1) q.set('recur', 'RRULE:FREQ=DAILY;COUNT=' + count);
+  return 'https://calendar.google.com/calendar/render?' + q.toString();
+}
+// Daily routines and milestones, as one link each.
+function calLinks(st, cfg){
+  const s = new Date(st.surgery), d0 = midnight(s), W = st.wake, B = st.bed, L = [], R = cfg.rinseDays;
+  const day = n => addDays(d0, n);
+  for (const [k,label] of MEALS) L.push({label:'Salt rinse after '+label, when:'Daily, days 1–'+R+', '+fmt(addMin(at(d0,st[k]),15)), url:gcalURL(addMin(at(day(1),st[k]),15),15,'Salt-water rinse after '+label,RINSE,R)});
+  if (st.curasept){
+    L.push({label:'Curasept rinse (morning)', when:'Daily, days 4–14', url:gcalURL(addMin(at(day(4),W),30),15,'Curasept rinse (morning)',CURA,11)});
+    L.push({label:'Curasept rinse (before bed)', when:'Daily, days 4–14', url:gcalURL(addMin(bedAt(day(4),W,B),-30),15,'Curasept rinse (before bed)',CURA,11)});
+  }
+  L.push({label:'End of the 48 hours with no smoking or alcohol', when:'One reminder', url:gcalURL(shiftToWake(addMin(s,48*60),W,B),15,'48 hours since surgery','The first 48 hours with no smoking and no alcohol are over.',1)});
+  L.push({label:'Day 3: swelling often peaks', when:'One reminder', url:gcalURL(addMin(at(day(3),W),60),15,'Swelling often peaks today','Swelling often peaks today. Ice packs help.',1)});
+  L.push({label:'Day '+cfg.graftBrushDay+': gentle brushing of the graft area can start', when:'One reminder', url:gcalURL(addMin(at(day(cfg.graftBrushDay),W),60),15,'Gum graft area: gentle brushing can start',BRUSH_TXT,1)});
+  return L;
+}
+
+// Every reminder for the 2-week plan as single events {t, mins, title, details}.
+function planEvents(st, data, cfg){
+  const s = new Date(st.surgery), d0 = midnight(s), W = st.wake, B = st.bed, ev = [];
+  const day = n => addDays(d0, n);
+  for (let n = 1; n <= cfg.rinseDays; n++)
+    for (const [k,label] of MEALS) ev.push({t:addMin(at(day(n),st[k]),15), mins:15, title:'Salt-water rinse after '+label, details:RINSE});
+  if (st.curasept) for (let n = 4; n <= PLAN_DAYS; n++){
+    ev.push({t:addMin(at(day(n),W),30), mins:15, title:'Curasept rinse (morning)', details:CURA});
+    ev.push({t:addMin(bedAt(day(n),W,B),-30), mins:15, title:'Curasept rinse (before bed)', details:CURA});
+  }
+  ev.push({t:shiftToWake(addMin(s,48*60),W,B), mins:15, title:'48 hours since surgery', details:'The first 48 hours with no smoking and no alcohol are over.'});
+  ev.push({t:addMin(at(day(3),W),60), mins:15, title:'Swelling often peaks today', details:'Swelling often peaks today. Ice packs help.'});
+  const both = endRinseText(cfg);
+  if (both) ev.push({t:addMin(at(day(cfg.rinseDays+1),W),60), mins:15, title:'Salt rinses and no-strenuous-activity days are over', details:both});
+  else {
+    ev.push({t:addMin(at(day(cfg.rinseDays+1),W),60), mins:15, title:'Salt-water rinses are finished', details:'Salt-water rinses (days 1–'+cfg.rinseDays+') are finished.'});
+    ev.push({t:addMin(at(day(STRENUOUS_DAYS+1),W),60), mins:15, title:'No-strenuous-activity days are over', details:'The days of no strenuous physical activity (days 0–'+STRENUOUS_DAYS+') are finished.'});
+  }
+  ev.push({t:addMin(at(day(cfg.graftBrushDay),W),60), mins:15, title:'Gum graft area: gentle brushing can start', details:BRUSH_TXT});
+  if (cfg.medTiming){
+    const fin = data.finished || {};
+    for (const k of Object.keys(MEDS)){
+      const med = MEDS[k], m = st.meds[k];
+      if (!m || !m.on || med.kind === 'prn' || fin[k]) continue;
+      let t = medStart(st, data, k);
+      if (!t) continue;
+      const details = med.notes.join(' ') + (med.kind === 'abx' ? ' ' + ABX_NOTE : '');
+      // Antibiotics: the course length entered at setup. Pain medicine: first 3 days only.
+      const count = med.kind === 'abx' ? (st.abxDays||7) * Math.round(24/med.h) : Infinity;
+      const end = med.kind === 'abx' ? addDays(d0, PLAN_DAYS+1) : addDays(midnight(t), PAIN_CAL_DAYS);
+      for (let i = 0; i < count && t < end; i++){ ev.push({t, mins:10, title:med.name+' '+med.dose, details}); t = nextDue(t, med.h, W, B); }
+    }
+  }
+  return ev.sort((a,b) => a.t - b.t);
+}
+
+// ---- iCalendar (.ics) ----
+const icsStamp = d => d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + 'T' + pad(d.getHours()) + pad(d.getMinutes()) + '00';
+const icsUTC = d => d.getUTCFullYear() + pad(d.getUTCMonth()+1) + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z';
+const icsText = s => String(s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');
+// Fold content lines at 75 octets (UTF-8), continuation lines start with a space.
+function icsFold(line){
+  const out = []; let cur = '', bytes = 0;
+  for (const ch of line){
+    const c = ch.codePointAt(0), b = c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    if (bytes + b > 75){ out.push(cur); cur = ' '; bytes = 1; }
+    cur += ch; bytes += b;
+  }
+  out.push(cur);
+  return out.join('\r\n');
+}
+// Build the whole calendar file. Times are floating (local wall-clock) so they match the patient's day.
+function buildICS(st, data, cfg, opts){
+  opts = opts || {};
+  const from = opts.from || null, stamp = icsUTC(opts.now || new Date()), seed = opts.seed || Date.now().toString(36);
+  const ev = planEvents(st, data, cfg).filter(e => !from || e.t >= from);
+  const L = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Graft Recovery Companion//Pilot//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Graft recovery'];
+  ev.forEach((e,i) => {
+    L.push('BEGIN:VEVENT', 'UID:grc-' + seed + '-' + i + '-' + icsStamp(e.t) + '@graft-recovery', 'DTSTAMP:' + stamp,
+      'DTSTART:' + icsStamp(e.t), 'DTEND:' + icsStamp(addMin(e.t, e.mins||15)),
+      'SUMMARY:' + icsText(e.title), 'DESCRIPTION:' + icsText(e.details||''), 'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(e.title), 'TRIGGER:-PT0M', 'END:VALARM', 'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return {text: L.map(icsFold).join('\r\n') + '\r\n', count: ev.length};
+}
+/*PURE-END*/
+
+const KEY = 'graftRecovery.v1';
+const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}});
+let S = blank();
+try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(blank(), JSON.parse(raw)); } catch(e) {}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+
+const P = CONFIG.practice || {};
+const clinicNum = () => P.phone || (S.setup && S.setup.clinic) || '';
+const perioNum = () => P.mobile || (S.setup && S.setup.perio) || '';
+
+/* ---------- preview mode (testers only: ?preview or #preview) ---------- */
+const PREVIEW = /preview/i.test(location.search + location.hash);
+let previewDay = null;
+// The app's idea of "now". In preview mode: surgery date + N days, at the real time of day.
+function appNow(){
+  const real = new Date();
+  if (!PREVIEW || previewDay == null || !S.setup) return real;
+  const d = addDays(midnight(new Date(S.setup.surgery)), previewDay);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), real.getHours(), real.getMinutes(), real.getSeconds());
+}
+function renderPreview(){
+  const el = $('#pv');
+  if (!PREVIEW || !S.setup){ el.hidden = true; el.innerHTML = ''; return; }
+  if (previewDay == null) previewDay = Math.max(0, Math.min(PLAN_DAYS, dayIdx(new Date(S.setup.surgery), new Date())));
+  el.hidden = false;
+  if (!$('#pv-range')){
+    el.innerHTML = `<label for="pv-range" id="pv-label"></label><input type="range" id="pv-range" min="0" max="${PLAN_DAYS}" step="1">`;
+    $('#pv-range').addEventListener('input', e => { previewDay = +e.target.value; flash = {}; $('#pv-label').textContent = pvLabel(); if (tab !== 'setup') render(); });
+  }
+  $('#pv-range').value = previewDay;
+  $('#pv-label').textContent = pvLabel();
+}
+const pvLabel = () => 'Preview: day ' + previewDay + ' (testing only)';
+
+let tab = S.setup ? 'today' : 'setup';
+let flash = {};          // transient inline messages
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const telHref = num => 'tel:' + esc(String(num).replace(/[^\d+]/g,''));
+const longDay = d => d.toLocaleDateString(undefined, {weekday:'short', day:'numeric', month:'short'});
+const whenStr = (d, now) => sameDay(d, now) ? fmt(d) : (sameDay(d, addDays(midnight(now),1)) ? 'tomorrow ' + fmt(d) : longDay(d) + ' ' + fmt(d));
+const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const PRIVACY = 'Everything you enter stays on this phone. Nothing is sent anywhere.';
+
+function defaults(){
+  const n = new Date();
+  const meds = {}; Object.keys(MEDS).forEach(k => meds[k] = {on:false, next:'', nextAt:null});
+  return {surgery: dateKey(n) + 'T09:00', wake:'07:00', bed:'22:30', breakfast:'08:00', lunch:'12:30', dinner:'18:30',
+          sedation:false, curasept:false, meds, abxDays:7, clinic:'', perio:''};
+}
+const activeMeds = () => Object.keys(MEDS).filter(k => S.setup.meds[k] && S.setup.meds[k].on);
+const isFinished = k => !!S.finished[k];
+
+/* ---------- rendering ---------- */
+function render(){
+  const now = appNow();
+  document.querySelectorAll('#tabs button').forEach(b => { if (b.dataset.act === 'tab:'+tab) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  $('#tabbtns').hidden = !S.setup;
+  renderPreview();
+  renderSafety();
+  renderTop(now);
+  const m = $('#main');
+  if (tab === 'setup') m.innerHTML = setupHTML();
+  else if (tab === 'meds') m.innerHTML = medsHTML(now);
+  else if (tab === 'help') m.innerHTML = helpHTML();
+  else m.innerHTML = todayHTML(now);
+  if (tab === 'setup') wireSetup();
+}
+
+function renderSafety(){
+  const num = clinicNum();
+  $('#safety').innerHTML = 'Your periodontist’s advice comes first. If in doubt, call the practice' +
+    (num ? `: <a href="${telHref(num)}">${esc(num)}</a>` : '.');
+}
+
+function renderTop(now){
+  const brand = `<div class="brand"><span class="app">Graft Recovery Companion</span>${P.name ? `<span class="prac">${esc(P.name)}</span>` : ''}</div>`;
+  if (!S.setup){ $('#top').innerHTML = `<div class="top-row">${brand}</div>`; return; }
+  const s = new Date(S.setup.surgery), n = dayIdx(s, now);
+  let title = n < 0 ? 'Before surgery' : n > PLAN_DAYS ? 'Plan complete' : 'Day ' + n + '<small>of 14</small>';
+  if (n === 0) title = 'Day 0<small>surgery day</small>';
+  let strip = '';
+  for (let i = 0; i <= PLAN_DAYS; i++) strip += '<i class="' + (i < n ? 'done' : i === n ? 'cur' : '') + '"></i>';
+  $('#top').innerHTML = `<div class="top-row">${brand}
+    <button type="button" class="linkbtn" data-act="tab:setup">Settings</button></div>
+    <div class="top-row"><h1 class="day">${title}</h1><span class="sub">${esc(longDay(now))} · ${fmt(now)}</span></div>
+    <div class="strip" role="img" aria-label="Day ${Math.max(0,Math.min(n,PLAN_DAYS))} of 14">${strip}</div>`;
+}
+
+function dayNotes(n, s, now){
+  const st = S.setup, out = [];
+  if (n === 0) out.push(['Go home and rest.'], ['While numb, don’t bite your lips or tongue and don’t push the dressing.']);
+  if (st.sedation && now < new Date(s.getTime() + 24*H) && now >= addMin(s,-12*60))
+    out.push(['After sedation, until ' + whenStr(new Date(s.getTime()+24*H), now) + ': don’t drive, use heavy machinery, sign legal documents or look after children.', 'warn']);
+  if (now < new Date(s.getTime() + 48*H) && n >= 0) out.push(['No smoking and no alcohol until ' + whenStr(new Date(s.getTime()+48*H), now) + ' (first 48 hours).', 'warn']);
+  if (n === 1) out.push(['You can return to work.']);
+  if (n >= 1 && n < CONFIG.graftBrushDay) out.push(['Brush and floss the areas away from the surgery as normal.']);
+  if (n === 3) out.push(['Swelling often peaks today. Ice packs help.']);
+  if (n >= 0 && n <= STRENUOUS_DAYS) out.push(['No strenuous physical activity (days 0–' + STRENUOUS_DAYS + ').']);
+  if (n >= CONFIG.graftBrushDay) out.push([BRUSH_TXT]);
+  if (S.setup.meds.metronidazole && S.setup.meds.metronidazole.on && !isFinished('metronidazole')) out.push(['No alcohol while taking metronidazole.', 'warn']);
+  out.push(['Avoid clenching or grinding your teeth.']);
+  return out;
+}
+function comingUp(n, s){
+  const st = S.setup, t = n + 1, R = CONFIG.rinseDays, m = {};
+  const add = (d, txt) => { if (txt) m[d] = m[d] ? m[d] + ' ' + txt : txt; };
+  add(1, 'Salt-water rinses after each meal start. You can return to work.');
+  add(2, 'At ' + fmt(s) + ' the first 48 hours end (no smoking, no alcohol until then).');
+  add(3, 'Swelling often peaks on day 3. Ice packs help.');
+  add(4, st.curasept ? 'Curasept rinses start: 60 seconds, morning and before bed.' : null);
+  if (endRinseText(CONFIG)) add(R+1, endRinseText(CONFIG));
+  else { add(R+1, 'Salt-water rinses (days 1–' + R + ') are finished.'); add(STRENUOUS_DAYS+1, 'The days of no strenuous activity (days 0–' + STRENUOUS_DAYS + ') are finished.'); }
+  add(CONFIG.graftBrushDay, 'Gum graft area: you can start gentle brushing there.');
+  add(PLAN_DAYS+1, 'Your 2-week plan is complete.');
+  return m[t] || 'No changes tomorrow. Keep to today’s routine.';
+}
+
+// Medicine items for today: the dose due now (if any) plus the planned chain for the rest of today.
+function medItems(now){
+  if (!CONFIG.medTiming) return [];
+  const st = S.setup, items = [], endDay = addDays(midnight(now),1);
+  for (const k of activeMeds()){
+    const med = MEDS[k];
+    if (med.kind === 'prn' || isFinished(k)) continue;
+    const nd = medStart(st, S, k);
+    if (!nd) continue;
+    const label = med.name + ' ' + med.dose, note = med.kind === 'pain' ? 'After eating.' : (k === 'metronidazole' ? 'With food. No alcohol.' : 'Until the course is finished.');
+    if (nd <= now) items.push({med:k, t:nd, title:label, detail:note, due:true});
+    let t = nd <= now ? nextDue(now, med.h, st.wake, st.bed) : nd, first = nd > now;
+    while (t < endDay){ items.push({med:k, t, title:label, detail: first ? note : 'Planned. Depends on when you take the dose before.', planned:true}); first = false; t = nextDue(t, med.h, st.wake, st.bed); }
+  }
+  return items;
+}
+
+function itemHTML(it, now, key){
+  const late = it.t <= addMin(now,-30);
+  const whenTxt = it.t <= now ? (late ? 'since ' + fmt(it.t) : 'now') : fmt(it.t);
+  if (it.med){
+    if (it.due) return `<li class="item ${late?'late':''}"><span class="dot" aria-hidden="true"></span><div class="txt"><div class="t">${esc(it.title)}</div><div class="d">${esc(it.detail)} Due ${whenTxt}.</div></div><button type="button" class="btn small" data-act="take:${it.med}">Taken</button></li>`;
+    return `<li class="item"><span class="dot" aria-hidden="true"></span><div class="txt"><div class="t">${esc(it.title)}</div><div class="d">${esc(it.detail)}</div></div><span class="when">${fmt(it.t)}</span></li>`;
+  }
+  const on = !!S.ticks[key];
+  return `<li class="item ${late && !on ? 'late':''}"><button type="button" class="tick ${on?'on':''}" data-act="tick:${esc(key)}" aria-pressed="${on}" aria-label="${on?'Mark not done':'Mark done'}: ${esc(it.title)}">${CHECK}</button>
+    <div class="txt"><div class="t">${esc(it.title)}</div>${it.detail ? `<div class="d">${esc(it.detail)}</div>` : ''}</div><span class="when">${on ? 'done' : whenTxt}</span></li>`;
+}
+
+function todayHTML(now){
+  const st = S.setup, s = new Date(st.surgery), n = dayIdx(s, now), dk = dateKey(now);
+  if (n < 0){
+    return `<section class="now"><h2>Your plan starts on surgery day</h2><p>Surgery: ${esc(longDay(s))} at ${fmt(s)}. This screen will show what to do and when from then on.</p></section>
+      ${calHTML()}`;
+  }
+  const tasks = n <= PLAN_DAYS ? tasksFor(st, S, now, CONFIG) : [];
+  const meds = medItems(now);
+  const keyOf = it => dk + '|' + it.id;
+  const nowList = [], later = [], done = [];
+  tasks.forEach(it => { if (S.ticks[keyOf(it)]) done.push(it); else (it.t <= now ? nowList : later).push(it); });
+  meds.forEach(it => (it.due ? nowList : later).push(it));
+  nowList.sort((a,b) => a.t - b.t); later.sort((a,b) => a.t - b.t);
+  const nextUp = later[0];
+  const doseToday = activeMeds().flatMap(k => (S.doses[k]||[]).map(iso => ({k, t:new Date(iso)}))).filter(x => sameDay(x.t, now)).sort((a,b) => a.t - b.t);
+
+  let h = `<section class="now" aria-labelledby="nowh"><h2 id="nowh">Now</h2>`;
+  h += nowList.length ? `<ul class="list">${nowList.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul>`
+    : `<p class="empty">Nothing due right now.${nextUp ? ' Next: ' + esc(nextUp.title) + ' at ' + fmt(nextUp.t) + '.' : ''}</p>`;
+  h += `</section>`;
+
+  h += `<section><button type="button" class="btn eat" data-act="eat">I’ve just eaten</button>`;
+  if (flash.eat) h += `<div class="msg" role="status">${flash.eat}</div>`;
+  h += `</section>`;
+
+  if (later.length) h += `<section><h2 class="label">Later today</h2><ul class="list">${later.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul></section>`;
+
+  h += `<section><h2 class="label">Remember today</h2><ul class="notes">${dayNotes(n, s, now).map(([t,c]) => `<li class="${c||''}">${esc(t)}</li>`).join('')}</ul>`;
+  if (n <= PLAN_DAYS) h += `<p class="coming"><b>Coming up tomorrow:</b> ${esc(comingUp(n, s))}</p>`;
+  h += `</section>`;
+
+  if (done.length || doseToday.length){
+    h += `<section class="done"><h2 class="label">Done today</h2><ul class="list">${done.map(it => itemHTML(it, now, keyOf(it))).join('')}`;
+    h += doseToday.map(x => { const last = (S.doses[x.k]||[]).slice(-1)[0] === x.t.toISOString();
+      return `<li class="item"><span class="tick on" aria-hidden="true">${CHECK}</span><div class="txt"><div class="t">${esc(MEDS[x.k].name)}</div><div class="d">Taken at ${fmt(x.t)}</div></div>${last ? `<button type="button" class="btn small line" data-act="undo:${x.k}">Undo</button>` : '<span></span>'}</li>`; }).join('');
+    h += `</ul></section>`;
+  }
+  if (CONFIG.surveyUrl && n >= 12)
+    h += `<section class="card survey" id="survey"><h3>How did the app help?</h3><a class="btn" href="${esc(CONFIG.surveyUrl)}" target="_blank" rel="noopener">Take a 1-minute survey</a></section>`;
+  return h + calHTML();
+}
+
+function calHTML(){
+  const L = calLinks(S.setup, CONFIG);
+  return `<section id="calsec"><h2 class="label">Phone reminders</h2>
+    <p>Add these to your phone’s calendar and it will remind you even when this app is closed.</p>
+    <button type="button" class="btn wide" data-act="ics">Add all reminders to my calendar</button>
+    <p class="sub">On iPhone, the calendar file opens with an “Add All” button. Tap it.</p>
+    ${flash.ics ? `<div class="msg" role="status">${esc(flash.ics)}</div>` : ''}
+    <h3 class="calsub">Or add one at a time to Google Calendar</h3>
+    <ul class="list">${L.map(x => `<li class="item cal"><div class="txt"><div class="t">${esc(x.label)}</div><div class="d">${esc(x.when)}</div></div><a class="btn small line" href="${esc(x.url)}" target="_blank" rel="noopener">Add</a></li>`).join('')}</ul>
+    ${CONFIG.medTiming ? '<p class="sub">Medicine reminders: on the Medicines tab, use “Add to calendar” after each dose.</p>' : ''}</section>`;
+}
+
+function downloadICS(){
+  const now = appNow(), r = buildICS(S.setup, S, CONFIG, {from: addMin(now,-1), now: new Date()});
+  if (!r.count){ flash.ics = 'There are no reminders left to add.'; render(); return; }
+  const url = URL.createObjectURL(new Blob([r.text], {type:'text/calendar;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'graft-recovery.ics'; a.rel = 'noopener'; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
+  flash.ics = r.count + ' reminders are in the file graft-recovery.ics. Open it to add them to your calendar.';
+  render();
+}
+
+function medNotesHTML(k){
+  const med = MEDS[k];
+  return `<ul class="small-notes">${med.notes.map(x => `<li>${esc(x)}</li>`).join('')}${med.kind === 'abx' ? `<li>${esc(ABX_NOTE)}</li>` : ''}</ul>`;
+}
+function finishHTML(k){
+  const med = MEDS[k];
+  if (med.kind !== 'abx' || isFinished(k)) return '';
+  return flash.finish === k
+    ? `<div class="msg"><p>Have you taken every ${esc(med.name.toLowerCase())} dose?</p><div class="row"><button type="button" class="btn small" data-act="finish-yes:${k}">Yes, all finished</button><button type="button" class="btn small line" data-act="finish-no">Not yet</button></div></div>`
+    : `<button type="button" class="btn line" data-act="finish:${k}">Finished my course</button>`;
+}
+const finishedHTML = k => `<p class="due">Course finished</p><p class="sub">Finished ${esc(longDay(new Date(S.finished[k])))}. Probiotic drink or yogurt daily for 3 days is on your Today list.</p>`;
+
+function medsHTML(now){
+  const st = S.setup, ks = activeMeds();
+  if (!ks.length) return `<section class="card"><h3>No medicines set</h3><p>Tick the medicines you were given in Settings.</p><button type="button" class="btn" data-act="tab:setup">Open Settings</button></section>`;
+  let h = '';
+  if (!CONFIG.medTiming){
+    // Simple mode: log doses only. The patient follows the timing on their prescription label.
+    h += `<div class="msg"><p><b>Follow the timing on your prescription label.</b></p></div>`;
+    for (const k of ks){
+      const med = MEDS[k], log = S.doses[k] || [], last = log.length ? new Date(log[log.length-1]) : null;
+      h += `<section class="card" aria-label="${esc(med.name)}"><h3>${esc(med.name)} <span class="sub">${esc(med.dose)}</span></h3>`;
+      if (isFinished(k)) h += finishedHTML(k);
+      else {
+        h += last ? `<p class="due">Last taken ${esc(whenStr(last, now))}</p>` : `<p class="sub">Tap “Taken now” each time you take a dose.</p>`;
+        h += `<div class="row"><button type="button" class="btn" data-act="take:${k}">Taken now</button>${last ? `<button type="button" class="btn small line" data-act="undo:${k}">Undo</button>` : ''}</div>`;
+      }
+      h += medNotesHTML(k) + finishHTML(k) + `</section>`;
+    }
+    return h + `<p class="foot">Not taking one any more? Untick it in Settings.</p>`;
+  }
+  for (const k of ks){
+    const med = MEDS[k], log = S.doses[k] || [], last = log.length ? new Date(log[log.length-1]) : null;
+    h += `<section class="card" aria-label="${esc(med.name)}"><h3>${esc(med.name)} <span class="sub">${esc(med.dose)}</span></h3>`;
+    if (isFinished(k)){
+      h += finishedHTML(k);
+    } else {
+      const nd = medStart(st, S, k);
+      if (med.kind === 'prn'){
+        h += `<p class="sub">Only when needed. No scheduled reminders.</p>`;
+        h += nd && nd > now ? `<p class="due">Not before ${esc(whenStr(nd, now))}</p>` : `<p class="due">Can take if needed</p>`;
+      } else if (!nd){
+        h += `<p class="sub">Tap “Taken now” when you take your next dose. The next one will be worked out from that.</p>`;
+      } else {
+        const late = nd <= addMin(now,-30);
+        h += `<p class="due ${late?'late':''}">${nd <= now ? (late ? 'Overdue since ' + fmt(nd) : 'Due now') : 'Next due ' + esc(whenStr(nd, now))}</p>`;
+        if (nd > now) h += `<p><a class="btn small line" href="${esc(gcalURL(nd,10,med.name+' '+med.dose,med.notes.join(' ')+(med.kind==='abx'?' '+ABX_NOTE:''),1))}" target="_blank" rel="noopener">Add next dose to calendar</a></p>`;
+      }
+      if (last) h += `<p class="sub">Last taken ${esc(whenStr(last, now))}.</p>`;
+      if (k === 'paracetamol' || k === 'cocodamol'){
+        const ib = (S.doses.ibuprofen||[]).slice(-1)[0];
+        if (ib && st.meds.ibuprofen && st.meds.ibuprofen.on) h += `<p class="sub">4 hours after your last ibuprofen: ${esc(whenStr(new Date(new Date(ib).getTime()+4*H), now))}.</p>`;
+      }
+      if (flash.early === k){
+        h += `<div class="msg warn"><p>It isn’t ${esc(fmt(nd))} yet. The gap between doses should not be shortened. Log a dose taken now anyway?</p>
+          <div class="row"><button type="button" class="btn small" data-act="take-force:${k}">Yes, I took it</button><button type="button" class="btn small line" data-act="early-no">No, go back</button></div></div>`;
+      } else {
+        h += `<div class="row"><button type="button" class="btn" data-act="take:${k}">Taken now</button>${last ? `<button type="button" class="btn small line" data-act="undo:${k}">Undo last</button>` : ''}</div>`;
+      }
+    }
+    h += medNotesHTML(k) + finishHTML(k) + `</section>`;
+  }
+  return h + `<p class="foot">Not taking one any more? Untick it in Settings.</p>`;
+}
+
+function phoneHTML(label, num, id){
+  if (!num) return `<div class="card"><p class="label">${label}</p><p class="sub">No number saved. Add it in Settings.</p></div>`;
+  return `<div class="card"><p class="label">${label}</p><div class="phone"><a class="num" id="${id}" href="${telHref(num)}">${esc(num)}</a>
+    <button type="button" class="btn small ghost" data-act="copy:${id}">${flash.copied === id ? 'Copied' : 'Copy'}</button></div></div>`;
+}
+function helpHTML(){
+  return `<section class="help"><h2 class="label">Call the clinic</h2>
+      ${P.name ? `<p class="prac">${esc(P.name)}</p>` : ''}
+      ${phoneHTML('Clinic', clinicNum(), 'ph-clinic')}${phoneHTML('Periodontist mobile', perioNum(), 'ph-perio')}
+      <p><b>If in doubt, call your clinic.</b></p></section>
+    <section class="card help"><h3>Bleeding</h3><p>Slow oozing for several hours is normal.</p>
+      <p>If it is heavy:</p><ol><li>Press damp gauze or a damp tea bag on the area for 30 minutes. Repeat if needed.</li><li>Hold an ice pack against the cheek.</li><li>If it continues, call the clinic.</li></ol></section>
+    <section class="card help"><h3>Food</h3><p>Blended or liquid food: soups, smoothies, Complan, Nutriment.</p>
+      <p>Lukewarm liquids once your lips are no longer numb.</p><p>Scrambled eggs, yogurt and soft cheese are good.</p>
+      <p>Avoid refined sugar and spicy food.</p><p>Applesauce helps with nausea on antibiotics.</p></section>
+    <section class="card help"><h3>Dressing or stitches come loose</h3><p>Not a problem unless there is pain or heavy bleeding.</p></section>
+    <section class="foot"><p>Your sheet gives two lengths for two steps. This app uses: salt rinses for ${CONFIG.rinseDays} days, and brushing the graft area from day ${CONFIG.graftBrushDay}. Please check with your periodontist.</p>
+      <p>This app is a reminder aid based on your periodontist's instruction sheet. Always follow your periodontist's advice.</p>
+      <p class="privacy">${PRIVACY}</p></section>`;
+}
+
+function setupHTML(){
+  const st = S.setup || defaults(), first = !S.setup;
+  const f = (id, label, type, val) => `<div class="f"><label for="${id}">${label}</label><input type="${type}" id="${id}" value="${esc(val)}"></div>`;
+  const ck = (id, label, on, sub) => `<label class="check"><input type="checkbox" id="${id}" ${on?'checked':''}><span>${label}${sub ? `<small>${sub}</small>` : ''}</span></label>`;
+  let meds = '';
+  for (const k of Object.keys(MEDS)){
+    const m = st.meds[k] || {}, med = MEDS[k];
+    meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : ''))}
+      ${med.kind === 'prn' || !CONFIG.medTiming ? '' : `<div class="f" id="mf-${k}" ${m.on?'':'hidden'}><label for="mt-${k}">Next dose due at</label><input type="time" id="mt-${k}" value="${esc(m.next||'')}"></div>`}</div>`;
+  }
+  const phones = (P.phone ? '' : f('s-clinic','Clinic phone','tel',st.clinic)) + (P.mobile ? '' : f('s-perio','Periodontist mobile','tel',st.perio));
+  return `<div class="intro">${first ? '<h1>Let’s set up your plan</h1><p class="sub">About 30 seconds. You can change any of this later in Settings.</p>' : '<h1>Settings</h1>'}</div>
+  <form id="setup" novalidate>
+    <fieldset><legend>Surgery</legend>${f('s-surgery','Surgery date and time','datetime-local',st.surgery)}
+      ${ck('s-sed','I had sedation (pills or IV)',st.sedation)}${ck('s-cura','I was given Curasept mouthwash',st.curasept)}</fieldset>
+    <fieldset><legend>Your day</legend><div class="grid2">${f('s-wake','Wake-up time','time',st.wake)}${f('s-bed','Bedtime','time',st.bed)}</div>
+      <div class="grid3">${f('s-b','Breakfast','time',st.breakfast)}${f('s-l','Lunch','time',st.lunch)}${f('s-d','Dinner','time',st.dinner)}</div></fieldset>
+    <fieldset><legend>Medicines you were given</legend>${meds}
+      ${f('s-abx','Antibiotic course length (days)','number',st.abxDays)}</fieldset>
+    ${phones ? `<fieldset><legend>Phone numbers</legend>${phones}</fieldset>` : ''}
+    <div id="setup-err" class="msg warn" role="alert" hidden></div>
+    <p class="consent">This is a trial app. Your data stays on your phone.</p>
+    <button type="submit" class="btn wide">${first ? 'Start my plan' : 'Save'}</button>
+    ${first ? '' : '<button type="button" class="btn line wide" data-act="tab:today">Cancel</button>'}
+  </form>
+  ${first ? '' : (flash.reset
+    ? `<div class="msg warn" role="alert"><p>This erases your plan, ticks and medicine log on this phone. You will start setup again.</p>
+        <div class="row"><button type="button" class="btn small" data-act="reset-yes">Yes, start over</button><button type="button" class="btn small line" data-act="reset-no">Keep my plan</button></div></div>`
+    : `<button type="button" class="btn line wide" data-act="reset">Start over</button>`)}
+  <p class="privacy">${PRIVACY}</p>`;
+}
+function wireSetup(){
+  const form = $('#setup');
+  Object.keys(MEDS).forEach(k => { const c = $('#m-'+k), fb = $('#mf-'+k); if (c && fb) c.addEventListener('change', () => { fb.hidden = !c.checked; }); });
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const v = id => { const el = $('#'+id); return el ? el.value.trim() : ''; };
+    const err = $('#setup-err');
+    const surg = v('s-surgery');
+    if (!surg || isNaN(new Date(surg))){ err.textContent = 'Please enter your surgery date and time.'; err.hidden = false; return; }
+    for (const id of ['s-wake','s-bed','s-b','s-l','s-d']) if (!v(id)){ err.textContent = 'Please fill in all the times in “Your day”.'; err.hidden = false; return; }
+    const old = S.setup || defaults(), now = appNow();
+    const base = new Date(Math.max(now, new Date(surg)));
+    const meds = {};
+    for (const k of Object.keys(MEDS)){
+      const on = $('#m-'+k).checked, t = $('#mt-'+k), o = old.meds[k] || {}, next = t ? t.value : (o.next || '');
+      meds[k] = {on, next, nextAt: !next ? null : (next === o.next && o.nextAt) ? o.nextAt : resolveNext(next, base).toISOString()};
+    }
+    const days = Math.max(1, Math.min(30, parseInt(v('s-abx'),10) || 7));
+    S.setup = {surgery:surg, wake:v('s-wake'), bed:v('s-bed'), breakfast:v('s-b'), lunch:v('s-l'), dinner:v('s-d'),
+      sedation:$('#s-sed').checked, curasept:$('#s-cura').checked, meds, abxDays:days,
+      clinic: P.phone ? old.clinic : v('s-clinic'), perio: P.mobile ? old.perio : v('s-perio')};
+    save(); tab = 'today'; flash = {}; render(); window.scrollTo(0,0);
+  });
+}
+
+/* ---------- actions ---------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const [act, arg] = b.dataset.act.split(/:(.*)/s);
+  const now = appNow();
+  if (act === 'reset'){ flash.reset = true; render(); return; }
+  if (act === 'reset-no'){ flash = {}; render(); return; }
+  if (act === 'reset-yes'){ S = blank(); try { localStorage.removeItem(KEY); } catch(e) {} flash = {}; previewDay = null; tab = 'setup'; render(); window.scrollTo(0,0); return; }
+  if (act === 'tab'){ tab = arg; flash = {}; render(); window.scrollTo(0,0); return; }
+  if (act === 'tick'){ if (S.ticks[arg]) delete S.ticks[arg]; else S.ticks[arg] = now.toISOString(); save(); render(); return; }
+  if (act === 'take' || act === 'take-force'){
+    if (CONFIG.medTiming){
+      const nd = medStart(S.setup, S, arg);
+      if (act === 'take' && nd && nd > addMin(now, 5) && (S.doses[arg]||[]).length && MEDS[arg].kind !== 'prn'){ flash.early = arg; tab = 'meds'; render(); return; }
+      if (act === 'take' && nd && nd > now && MEDS[arg].kind === 'prn'){ flash.early = arg; render(); return; }
+    }
+    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; save(); render(); return;
+  }
+  if (act === 'early-no'){ flash.early = null; render(); return; }
+  if (act === 'undo'){ (S.doses[arg]||[]).pop(); save(); render(); return; }
+  if (act === 'finish'){ flash.finish = arg; render(); return; }
+  if (act === 'finish-no'){ flash.finish = null; render(); return; }
+  if (act === 'finish-yes'){ S.finished[arg] = now.toISOString(); flash.finish = null; save(); render(); return; }
+  if (act === 'ics'){ downloadICS(); return; }
+  if (act === 'eat'){
+    S.meals.push(now.toISOString()); S.meals = S.meals.slice(-60); save();
+    const n = dayIdx(new Date(S.setup.surgery), now), pain = activeMeds().some(k => MEDS[k].kind === 'pain');
+    const parts = ['Meal logged at ' + fmt(now) + '.'];
+    if (n >= 1 && n <= CONFIG.rinseDays) parts.push('Your salt-water rinse is now in the Now list.');
+    if (pain) parts.push(CONFIG.medTiming ? 'Pain medicine is taken after eating. Any dose that is due is in the Now list.' : 'Pain medicine is taken after eating.');
+    flash.eat = parts.map(esc).join(' '); render(); return;
+  }
+  if (act === 'copy'){
+    const el = document.getElementById(arg), txt = el ? el.textContent : '';
+    const selectIt = () => { try { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch(_){} };
+    try { navigator.clipboard.writeText(txt).then(() => { flash.copied = arg; render(); }, selectIt); } catch(_) { selectIt(); }
+    return;
+  }
+});
+
+render();
+setInterval(() => { if (tab !== 'setup') render(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && tab !== 'setup') render(); });
+</script>
+</body>
+</html>
