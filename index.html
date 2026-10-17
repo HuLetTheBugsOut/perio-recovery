@@ -306,7 +306,6 @@ function calLinks(st, cfg){
     L.push({label:'Curasept rinse (before bed)', when:'Daily, days 4–14', url:gcalURL(addMin(bedAt(day(4),W,B),-30),15,'Curasept rinse (before bed)',CURA,11)});
   }
   L.push({label:'End of the 48 hours with no smoking or alcohol', when:'One reminder', url:gcalURL(shiftToWake(addMin(s,48*60),W,B),15,'48 hours since surgery','The first 48 hours with no smoking and no alcohol are over.',1)});
-  L.push({label:'Day 3: swelling often peaks', when:'One reminder', url:gcalURL(addMin(at(day(3),W),60),15,'Swelling often peaks today','Swelling often peaks today. Ice packs help.',1)});
   L.push({label:'Day '+cfg.graftBrushDay+': gentle brushing of the graft area can start', when:'One reminder', url:gcalURL(addMin(at(day(cfg.graftBrushDay),W),60),15,'Gum graft area: gentle brushing can start',BRUSH_TXT,1)});
   return L;
 }
@@ -323,7 +322,6 @@ function planEvents(st, data, cfg){
     ev.push({t:addMin(bedAt(day(n),W,B),-30), mins:15, title:'Curasept rinse (before bed)', details:CURA});
   }
   ev.push({t:shiftToWake(addMin(s,48*60),W,B), mins:15, title:'48 hours since surgery', details:'The first 48 hours with no smoking and no alcohol are over.'});
-  ev.push({t:addMin(at(day(3),W),60), mins:15, title:'Swelling often peaks today', details:'Swelling often peaks today. Ice packs help.'});
   const both = endRinseText(cfg);
   if (both) ev.push({t:addMin(at(day(cfg.rinseDays+1),W),60), mins:15, title:'Salt rinses and no-strenuous-activity days are over', details:both});
   else {
