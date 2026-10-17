@@ -650,9 +650,11 @@ function todayHTML(now){
     : `<p class="empty">Nothing due right now.${nextUp ? ' Next: ' + esc(nextUp.title) + ' at ' + fmt(nextUp.t) + '.' : ''}</p>`;
   h += `</section>` + medRemindHTML(now);
 
-  h += `<section><button type="button" class="btn eat" data-act="eat">I’ve just eaten</button>`;
-  if (flash.eat) h += `<div class="msg" role="status">${flash.eat}</div>`;
-  h += `</section>`;
+  if (n >= 1 && n <= CONFIG.rinseDays){   // only matters while salt-water rinses are due
+    h += `<section><button type="button" class="btn eat" data-act="eat">I’ve just eaten</button>`;
+    if (flash.eat) h += `<div class="msg" role="status">${flash.eat}</div>`;
+    h += `</section>`;
+  }
 
   if (later.length) h += `<section><h2 class="label">Later today</h2><ul class="list">${later.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul></section>`;
 
