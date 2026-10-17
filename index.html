@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Graft Recovery Companion</title>
 <meta name="description" content="Day-by-day reminders for the two weeks after gum graft surgery, based on your periodontist's instruction sheet.">
-<meta name="theme-color" content="#EDF2F1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0D1819" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#EDF2F1">
+<meta name="color-scheme" content="light only">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Recovery">
@@ -31,12 +31,7 @@
   --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --body:"Atkinson Hyperlegible", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0D1819; --surface:#142426; --ink:#E2EDEB; --muted:#97AFAB; --line:#243A3C;
-  --accent:#62C3CF; --accent-ink:#06222A; --accent-soft:#17363A; --warn:#F1C06B; --warn-soft:#352A12; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0D1819; --surface:#142426; --ink:#E2EDEB; --muted:#97AFAB; --line:#243A3C;
-  --accent:#62C3CF; --accent-ink:#06222A; --accent-soft:#17363A; --warn:#F1C06B; --warn-soft:#352A12; color-scheme:dark}
+:root{color-scheme:light only}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:17px/1.45 var(--body);-webkit-text-size-adjust:100%}
 .wrap{max-width:560px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(110px + env(safe-area-inset-bottom,0px))}
