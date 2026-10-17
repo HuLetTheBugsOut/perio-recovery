@@ -97,6 +97,9 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .notes li.warn{border-left-color:var(--warn);background:var(--warn-soft)}
 .coming{color:var(--muted)}
 .coming b{color:var(--ink)}
+.sublabel{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 0 6px}
+#notes-warn{margin-bottom:8px}
+.fold .coming{margin:12px 0 0}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:10px}
 .card h3{font-family:var(--display);font-weight:600;font-size:21px}
 .due{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -567,11 +570,25 @@ function dayNotes(n, s, now){
   out.push(['Avoid clenching or grinding your teeth.', '', 0]);
   return out;
 }
+// Safety warnings stay visible; everything else sits in one "Remember today" fold (open on surgery day).
+// foldOpen keeps a fold open across re-renders, per day.
+const foldOpen = {};
+document.addEventListener('toggle', e => { if (e.target.dataset && e.target.dataset.fold) foldOpen[e.target.dataset.fold] = e.target.open; }, true);
 function notesHTML(n, s, now){
-  const all = dayNotes(n, s, now), daily = all.filter(x => x[2] != null && n > x[2]), today = all.filter(x => !daily.includes(x));
-  const li = ([t,c]) => `<li class="${c||''}">${esc(t)}</li>`;
-  return (today.length ? `<ul class="notes" id="notes-today">${today.map(li).join('')}</ul>` : '') +
-    (daily.length ? `<details class="fold" id="everyday"><summary>Every day (${daily.length})</summary><ul class="notes">${daily.map(li).join('')}</ul></details>` : '');
+  const all = dayNotes(n, s, now), warn = all.filter(x => x[1] === 'warn'), rest = all.filter(x => x[1] !== 'warn'),
+    daily = rest.filter(x => x[2] != null && n > x[2]), today = rest.filter(x => !daily.includes(x));
+  const li = ([t,c]) => `<li class="${c||''}">${esc(t)}</li>`, key = 'remember:' + n, open = foldOpen[key] ?? n === 0;
+  const tomorrow = n <= PLAN_DAYS ? comingUp(n, s) : '';
+  let h = warn.length ? `<ul class="notes" id="notes-warn">${warn.map(li).join('')}</ul>` : '';
+  const count = today.length + daily.length;
+  if (count || tomorrow) {
+    h += `<details class="fold" id="remember" data-fold="${key}"${open ? ' open' : ''}><summary><span>Remember today${count ? ' (' + count + ')' : ''}${tomorrow ? '<small>and what’s coming up tomorrow</small>' : ''}</span></summary>`;
+    if (today.length) h += `<ul class="notes" id="notes-today">${today.map(li).join('')}</ul>`;
+    if (daily.length) h += `<h3 class="sublabel">Every day</h3><ul class="notes" id="everyday">${daily.map(li).join('')}</ul>`;
+    if (tomorrow) h += `<p class="coming"><b>Coming up tomorrow:</b> ${esc(tomorrow)}</p>`;
+    h += `</details>`;
+  }
+  return h;
 }
 function comingUp(n, s){
   const st = S.setup, t = n + 1, R = CONFIG.rinseDays, m = {};
@@ -651,9 +668,7 @@ function todayHTML(now){
 
   if (later.length) h += `<section><h2 class="label">Later today</h2><ul class="list">${later.map(it => itemHTML(it, now, keyOf(it))).join('')}</ul></section>`;
 
-  h += `<section><h2 class="label">Remember today</h2>${notesHTML(n, s, now)}`;
-  if (n <= PLAN_DAYS) h += `<p class="coming"><b>Coming up tomorrow:</b> ${esc(comingUp(n, s))}</p>`;
-  h += `</section>`;
+  h += `<section>${notesHTML(n, s, now)}</section>`;
 
   if (done.length || doseToday.length){
     h += `<section class="done"><h2 class="label">Done today</h2><ul class="list">${done.map(it => itemHTML(it, now, keyOf(it))).join('')}`;
