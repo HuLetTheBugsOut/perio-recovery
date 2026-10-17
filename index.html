@@ -157,6 +157,11 @@ body{margin:0;overflow-x:hidden}
 .medrem .msg{background:var(--surface)}
 .mr+.mr{border-top:1px solid var(--line);padding-top:10px}
 .callout{border:2px solid var(--warn)}
+.linkbtn.u{text-decoration:underline;text-underline-offset:3px;font-size:15px}
+.tae{gap:8px}
+.tae label{font-weight:700;font-size:15px}
+.item .full{grid-column:1/-1;display:grid;gap:8px;margin-top:-8px;min-width:0}
+.item .full>.linkbtn{justify-self:end}
 </style>
 </head>
 <body>
@@ -451,6 +456,40 @@ function markReminded(k){
 }
 const gcalDose = (k, nd) => { const ev = doseEvent(k, nd); return gcalURL(nd, ev.mins, ev.title, ev.details, 1); };
 
+/* ---------- "Took it earlier?": log a dose at a past time (flash.takeAt = medicine key, one form at a time) ---------- */
+const takeAtBtn = k => `<button type="button" class="linkbtn u" data-act="take-at:${k}" aria-expanded="${flash.takeAt === k}">Took it earlier?</button>`;
+function takeAtHTML(k){
+  if (flash.takeAt !== k) return '';
+  const err = flash.takeAtErr;
+  return `<div class="msg tae" id="tae-${k}"><label for="tat-${k}">What time did you take it?</label>
+    <input type="time" id="tat-${k}" value="${esc(flash.takeAtVal||'')}"${err ? ` aria-invalid="true" aria-describedby="tae-err-${k}"` : ''}>
+    ${err ? `<p class="msg warn" id="tae-err-${k}" role="alert">${esc(err)}</p>` : ''}
+    <div class="row"><button type="button" class="btn small" data-act="take-at-save:${k}">Save</button><button type="button" class="btn small line" data-act="take-at-no">Cancel</button></div></div>`;
+}
+// Same early-dose warning as "Taken", for a chosen past time (flash.earlyAt = ISO).
+function earlyAtHTML(k){
+  const nd = medStart(S.setup, S, k), t = fmt(new Date(flash.earlyAt));
+  return `<div class="msg warn" role="alert"><p>It wasn’t ${esc(nd ? fmt(nd) : '')} yet at ${t}. The gap between doses should not be shortened. Log a dose taken at ${t} anyway?</p>
+    <div class="row"><button type="button" class="btn small" data-act="take-at-force:${k}">Yes, I took it</button><button type="button" class="btn small line" data-act="early-no">No, go back</button></div></div>`;
+}
+const focusTakeAt = () => { const el = flash.takeAt && document.getElementById('tat-' + flash.takeAt); if (el) el.focus(); };
+// "HH:MM" = its most recent past occurrence (today, or yesterday if later than now). Returns {t} or {err}.
+function takeAtTime(k, v, now){
+  if (!/^\d\d:\d\d$/.test(v || '')) return {err:'Enter the time you took it.'};
+  let t = at(now, v);
+  if (t > now){ if (t - now <= 12*H) return {err:'That time is in the future.'}; t = addDays(t, -1); }
+  if (now - t > 12*H) return {err:'Choose a time in the last 12 hours.'};
+  const log = (S.doses[k] || []).slice().sort(), last = log.length ? new Date(log[log.length-1]) : null;
+  if (last && t <= last) return {err:'That’s before your last dose at ' + whenStr(last, now) + '.'};
+  return {t};
+}
+function addDose(k, t){
+  const L = S.doses[k] = S.doses[k] || [];
+  L.push(t.toISOString()); L.sort();   // ISO strings sort by time
+  flash.takeAt = null; flash.takeAtErr = null; flash.early = null; flash.earlyAt = null; flash.taken = k;
+  save(); render();
+}
+
 /* ---------- rendering ---------- */
 function render(){
   const now = appNow();
@@ -459,12 +498,16 @@ function render(){
   renderPreview();
   renderSafety();
   renderTop(now);
+  // keep a half-typed "Took it earlier?" time (and its focus) across the 1-minute refresh
+  const ti = flash.takeAt && document.getElementById('tat-' + flash.takeAt), foc = !!ti && document.activeElement === ti;
+  if (ti) flash.takeAtVal = ti.value;
   const m = $('#main');
   if (tab === 'setup') m.innerHTML = setupHTML();
   else if (tab === 'meds') m.innerHTML = medsHTML(now);
   else if (tab === 'help') m.innerHTML = helpHTML();
   else m.innerHTML = todayHTML(now);
   if (tab === 'setup') wireSetup();
+  if (foc) focusTakeAt();
 }
 
 function renderSafety(){
@@ -537,7 +580,8 @@ function itemHTML(it, now, key){
   const late = it.t <= addMin(now,-30);
   const whenTxt = it.t <= now ? (late ? 'since ' + fmt(it.t) : 'now') : fmt(it.t);
   if (it.med){
-    if (it.due) return `<li class="item ${late?'late':''}"><span class="dot" aria-hidden="true"></span><div class="txt"><div class="t">${esc(it.title)}</div><div class="d">${esc(it.detail)} Due ${whenTxt}.</div></div><button type="button" class="btn small" data-act="take:${it.med}">Taken</button></li>`;
+    if (it.due) return `<li class="item ${late?'late':''}"><span class="dot" aria-hidden="true"></span><div class="txt"><div class="t">${esc(it.title)}</div><div class="d">${esc(it.detail)} Due ${whenTxt}.</div></div><button type="button" class="btn small" data-act="take:${it.med}">Taken</button>
+      <div class="full">${flash.early === it.med && flash.earlyAt ? earlyAtHTML(it.med) : takeAtBtn(it.med) + takeAtHTML(it.med)}</div></li>`;
     return `<li class="item"><span class="dot" aria-hidden="true"></span><div class="txt"><div class="t">${esc(it.title)}</div><div class="d">${esc(it.detail)}</div></div><span class="when">${fmt(it.t)}</span></li>`;
   }
   const on = !!S.ticks[key];
@@ -679,7 +723,7 @@ function medsHTML(now){
       if (isFinished(k)) h += finishedHTML(k);
       else {
         h += last ? `<p class="due">Last taken ${esc(whenStr(last, now))}</p>` : `<p class="sub">Tap “Taken now” each time you take a dose.</p>`;
-        h += `<div class="row"><button type="button" class="btn" data-act="take:${k}">Taken now</button>${last ? `<button type="button" class="btn small line" data-act="undo:${k}">Undo</button>` : ''}</div>`;
+        h += `<div class="row"><button type="button" class="btn" data-act="take:${k}">Taken now</button>${last ? `<button type="button" class="btn small line" data-act="undo:${k}">Undo</button>` : ''}${takeAtBtn(k)}</div>${takeAtHTML(k)}`;
       }
       h += medNotesHTML(k) + finishHTML(k) + `</section>`;
     }
@@ -714,11 +758,13 @@ function medsHTML(now){
         const ib = (S.doses.ibuprofen||[]).slice(-1)[0];
         if (ib && st.meds.ibuprofen && st.meds.ibuprofen.on) h += `<p class="sub">4 hours after your last ibuprofen: ${esc(whenStr(new Date(new Date(ib).getTime()+4*H), now))}.</p>`;
       }
-      if (flash.early === k){
+      if (flash.early === k && flash.earlyAt){
+        h += earlyAtHTML(k);
+      } else if (flash.early === k){
         h += `<div class="msg warn"><p>It isn’t ${esc(fmt(nd))} yet. The gap between doses should not be shortened. Log a dose taken now anyway?</p>
           <div class="row"><button type="button" class="btn small" data-act="take-force:${k}">Yes, I took it</button><button type="button" class="btn small line" data-act="early-no">No, go back</button></div></div>`;
       } else {
-        h += `<div class="row"><button type="button" class="btn" data-act="take:${k}">Taken now</button>${last ? `<button type="button" class="btn small line" data-act="undo:${k}">Undo last</button>` : ''}</div>`;
+        h += `<div class="row"><button type="button" class="btn" data-act="take:${k}">Taken now</button>${last ? `<button type="button" class="btn small line" data-act="undo:${k}">Undo last</button>` : ''}${takeAtBtn(k)}</div>${takeAtHTML(k)}`;
       }
     }
     h += medNotesHTML(k) + finishHTML(k) + `</section>`;
@@ -817,6 +863,7 @@ document.addEventListener('click', e => {
   const now = appNow();
   if (act === 'gcal'){ markReminded(arg); setTimeout(render, 0); return; }   // let the link open first, then show the tick
   if (act !== 'dose-ics'){ flash.taken = null; flash.dose = null; }
+  if (!act.startsWith('take-at')){ flash.takeAt = null; flash.takeAtErr = null; }
   if (act === 'reset'){ flash.reset = true; render(); return; }
   if (act === 'reset-no'){ flash = {}; render(); return; }
   if (act === 'reset-yes'){ S = blank(); try { localStorage.removeItem(KEY); } catch(e) {} flash = {}; previewDay = null; tab = 'setup'; render(); window.scrollTo(0,0); return; }
@@ -826,14 +873,36 @@ document.addEventListener('click', e => {
   if (act === 'take' || act === 'take-force'){
     if (CONFIG.medTiming){
       const nd = medStart(S.setup, S, arg);
-      if (act === 'take' && nd && nd > addMin(now, 5) && (S.doses[arg]||[]).length && MEDS[arg].kind !== 'prn'){ flash.early = arg; tab = 'meds'; render(); return; }
-      if (act === 'take' && nd && nd > now && MEDS[arg].kind === 'prn'){ flash.early = arg; render(); return; }
+      if (act === 'take' && nd && nd > addMin(now, 5) && (S.doses[arg]||[]).length && MEDS[arg].kind !== 'prn'){ flash.early = arg; flash.earlyAt = null; tab = 'meds'; render(); return; }
+      if (act === 'take' && nd && nd > now && MEDS[arg].kind === 'prn'){ flash.early = arg; flash.earlyAt = null; render(); return; }
     }
-    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; flash.taken = arg;   // stay on this tab: Today and Medicines both show the next-dose reminder prompt
+    (S.doses[arg] = S.doses[arg] || []).push(now.toISOString()); flash.early = null; flash.earlyAt = null; flash.taken = arg;   // stay on this tab: Today and Medicines both show the next-dose reminder prompt
     save(); render(); return;
   }
-  if (act === 'early-no'){ flash.early = null; render(); return; }
-  if (act === 'undo'){ (S.doses[arg]||[]).pop(); save(); render(); return; }
+  // "Took it earlier?" -> time form -> same checks as "Taken", with the chosen time. Stays on this tab.
+  if (act === 'take-at'){
+    flash.early = null; flash.earlyAt = null; flash.takeAtErr = null;
+    if (flash.takeAt === arg){ flash.takeAt = null; render(); return; }
+    flash.takeAt = arg; flash.takeAtVal = fmt(new Date(Math.round(addMin(now,-30) / (5*MIN)) * 5*MIN));
+    render(); focusTakeAt(); return;
+  }
+  if (act === 'take-at-no'){ flash.takeAt = null; flash.takeAtErr = null; render(); return; }
+  if (act === 'take-at-save'){
+    const el = document.getElementById('tat-' + arg), v = el ? el.value : '', r = takeAtTime(arg, v, now);
+    flash.takeAt = arg; flash.takeAtVal = v;
+    if (r.err){ flash.takeAtErr = r.err; render(); focusTakeAt(); return; }
+    const nd = medStart(S.setup, S, arg);
+    if (CONFIG.medTiming && MEDS[arg].kind !== 'prn' && (S.doses[arg]||[]).length && nd && r.t < addMin(nd, -5)){
+      flash.takeAt = null; flash.takeAtErr = null; flash.early = arg; flash.earlyAt = r.t.toISOString(); render(); return;
+    }
+    addDose(arg, r.t); return;
+  }
+  if (act === 'take-at-force'){ if (flash.early === arg && flash.earlyAt) addDose(arg, new Date(flash.earlyAt)); else render(); return; }
+  if (act === 'early-no'){
+    if (flash.earlyAt){ flash.takeAt = flash.early; flash.early = null; flash.earlyAt = null; render(); focusTakeAt(); return; }   // back to the time form
+    flash.early = null; render(); return;
+  }
+  if (act === 'undo'){ const L = S.doses[arg] || []; L.sort(); L.pop(); save(); render(); return; }   // most recent dose by time
   if (act === 'finish'){ flash.finish = arg; render(); return; }
   if (act === 'finish-no'){ flash.finish = null; render(); return; }
   if (act === 'finish-yes'){ S.finished[arg] = now.toISOString(); flash.finish = null; save(); render(); return; }
