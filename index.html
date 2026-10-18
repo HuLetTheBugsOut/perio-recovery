@@ -218,9 +218,9 @@ const CONFIG = {
 const MEDS = {
   paracetamol:{name:'Paracetamol',dose:'2 × 500 mg',h:8,kind:'pain',notes:['2 × 500 mg every 8 hours, taken 4 hours after ibuprofen.','Pain medicine is taken after eating.']},
   ibuprofen:{name:'Ibuprofen',dose:'1 × 400 mg',h:8,kind:'pain',notes:['1 × 400 mg every 8 hours, for at least 3 days.','Pain medicine is taken after eating.']},
-  amoxicillin:{name:'Amoxicillin',dose:'500 mg, 1 capsule',h:8,kind:'abx',notes:['500 mg, 1 capsule 3 times a day until finished.','Can interfere with the contraceptive pill and can cause thrush.']},
   cocodamol:{name:'Co-codamol',dose:'30/500 mg, 1 tablet',h:6,kind:'pain',notes:['30/500 mg, 1 every 6 hours for pain, taken 4 hours after ibuprofen.','Pain medicine is taken after eating.']},
   metronidazole:{name:'Metronidazole',dose:'400 mg',h:8,kind:'abx',notes:['400 mg every 8 hours, with food, no alcohol.']},
+  amoxicillin:{name:'Amoxicillin',dose:'500 mg, 1 capsule',h:8,kind:'abx',notes:['500 mg, 1 capsule 3 times a day until finished.','Can interfere with the contraceptive pill and can cause thrush.']},
   sudafed:{name:'Sudafed',dose:'1 tablet',h:12,kind:'prn',notes:['1 tablet every 12 hours.','For sinus lifts. Only when needed.']},
   sinex:{name:'Sinex nasal spray',dose:'1–2 sprays',h:6,kind:'prn',notes:['1–2 sprays every 6–8 hours if the nostril feels blocked.','For sinus lifts.']}
 };
@@ -838,10 +838,17 @@ function setupHTML(){
   const st = S.setup || defaults(), first = !S.setup;
   const f = (id, label, type, val) => `<div class="f"><label for="${id}">${label}</label><input type="${type}" id="${id}" value="${esc(val)}"></div>`;
   const ck = (id, label, on, sub) => `<label class="check"><input type="checkbox" id="${id}" ${on?'checked':''}><span>${label}${sub ? `<small>${sub}</small>` : ''}</span></label>`;
-  let meds = '';
+  // Grouped in MEDS order: painkillers, antibiotics (then course length), decongestants.
+  const GROUPS = {pain:'Painkillers', abx:'Antibiotics', prn:'Decongestants'};
+  const abxOn = Object.keys(MEDS).some(k => MEDS[k].kind === 'abx' && (st.meds[k]||{}).on);
+  let meds = '', lastKind = null;
   for (const k of Object.keys(MEDS)){
     const m = st.meds[k] || {}, med = MEDS[k];
-    meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : med.kind === 'abx' ? ' · antibiotic' : ''))}
+    if (med.kind !== lastKind){
+      if (lastKind === 'abx') meds += `<div id="abxf" ${abxOn ? '' : 'hidden'}>${f('s-abx','Antibiotic course length (days)','number',st.abxDays)}</div>`;
+      meds += `<h3 class="sublabel medgroup">${GROUPS[med.kind] || ''}</h3>`; lastKind = med.kind;
+    }
+    meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : ''))}
       ${med.kind === 'prn' || !CONFIG.medTiming ? '' : `<div class="f" id="mf-${k}" ${m.on?'':'hidden'}><label for="mt-${k}">Next dose due at</label><input type="time" id="mt-${k}" value="${esc(m.next||'')}"></div>`}</div>`;
   }
   // Clinic phone is required (it feeds the call links); the periodontist mobile stays optional.
@@ -852,7 +859,7 @@ function setupHTML(){
     <fieldset><legend>Surgery</legend>${f('s-surgery','Surgery date and time','datetime-local',st.surgery)}
       ${ck('s-sed','I had sedation (pills or IV)',st.sedation)}${ck('s-cura','I was given Curasept mouthwash',st.curasept)}</fieldset>
     <fieldset><legend>Medicines you were given</legend>${meds}
-      <div id="abxf" ${Object.keys(MEDS).some(k => MEDS[k].kind === 'abx' && (st.meds[k]||{}).on) ? '' : 'hidden'}>${f('s-abx','Antibiotic course length (days)','number',st.abxDays)}</div></fieldset>
+</fieldset>
     <details class="fold" id="times"><summary><span>Change meal and sleep times (optional)<small id="times-sum">${esc(timesSummary(st))}</small></span></summary>
       <fieldset><legend>Your day</legend><div class="grid3">${f('s-b','Breakfast','time',st.breakfast)}${f('s-l','Lunch','time',st.lunch)}${f('s-d','Dinner','time',st.dinner)}</div>
       <div class="grid2">${f('s-wake','Wake-up time','time',st.wake)}${f('s-bed','Bedtime','time',st.bed)}</div></fieldset></details>
