@@ -7,3 +7,5 @@ A simple phone web app that turns a periodontist's post-op instruction sheet int
 - Add `#preview` to the address to test any day from 0 to 14.
 
 This is a pilot. The paper instruction sheet remains the official guidance.
+
+Live app: https://perio-recovery.github.io/ (add `#preview` for the day 0–14 preview).
