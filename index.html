@@ -844,7 +844,7 @@ function setupHTML(){
   let meds = '';
   for (const k of Object.keys(MEDS)){
     const m = st.meds[k] || {}, med = MEDS[k];
-    meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : ''))}
+    meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : med.kind === 'abx' ? ' · antibiotic' : ''))}
       ${med.kind === 'prn' || !CONFIG.medTiming ? '' : `<div class="f" id="mf-${k}" ${m.on?'':'hidden'}><label for="mt-${k}">Next dose due at</label><input type="time" id="mt-${k}" value="${esc(m.next||'')}"></div>`}</div>`;
   }
   // Clinic phone is required (it feeds the call links); the periodontist mobile stays optional.
@@ -855,7 +855,7 @@ function setupHTML(){
     <fieldset><legend>Surgery</legend>${f('s-surgery','Surgery date and time','datetime-local',st.surgery)}
       ${ck('s-sed','I had sedation (pills or IV)',st.sedation)}${ck('s-cura','I was given Curasept mouthwash',st.curasept)}</fieldset>
     <fieldset><legend>Medicines you were given</legend>${meds}
-      ${f('s-abx','Antibiotic course length (days)','number',st.abxDays)}</fieldset>
+      <div id="abxf" ${Object.keys(MEDS).some(k => MEDS[k].kind === 'abx' && (st.meds[k]||{}).on) ? '' : 'hidden'}>${f('s-abx','Antibiotic course length (days)','number',st.abxDays)}</div></fieldset>
     <details class="fold" id="times"><summary><span>Change meal and sleep times (optional)<small id="times-sum">${esc(timesSummary(st))}</small></span></summary>
       <fieldset><legend>Your day</legend><div class="grid3">${f('s-b','Breakfast','time',st.breakfast)}${f('s-l','Lunch','time',st.lunch)}${f('s-d','Dinner','time',st.dinner)}</div>
       <div class="grid2">${f('s-wake','Wake-up time','time',st.wake)}${f('s-bed','Bedtime','time',st.bed)}</div></fieldset></details>
@@ -876,6 +876,9 @@ const timesSummary = t => 'Breakfast ' + t.breakfast + ' · Lunch ' + t.lunch + 
 function wireSetup(){
   const form = $('#setup');
   Object.keys(MEDS).forEach(k => { const c = $('#m-'+k), fb = $('#mf-'+k); if (c && fb) c.addEventListener('change', () => { fb.hidden = !c.checked; }); });
+  // Antibiotic course length only matters when an antibiotic (amoxicillin, metronidazole) is ticked.
+  const abxKeys = Object.keys(MEDS).filter(k => MEDS[k].kind === 'abx');
+  abxKeys.forEach(k => $('#m-'+k).addEventListener('change', () => { $('#abxf').hidden = !abxKeys.some(a => $('#m-'+a).checked); }));
   $('#times').addEventListener('input', () => { const v = id => $('#'+id).value || '--:--';
     $('#times-sum').textContent = timesSummary({breakfast:v('s-b'), lunch:v('s-l'), dinner:v('s-d'), wake:v('s-wake'), bed:v('s-bed')}); });
   form.addEventListener('submit', e => {
