@@ -470,6 +470,13 @@ function remindBtnHTML(k, nd, now, done){
   return `<div class="remind"><button type="button" class="btn small ${done ? 'line' : ''}" data-act="dose-ics:${k}" aria-label="${lbl}: ${esc(MEDS[k].name)} ${esc(whenStr(nd, now))}">${lbl}</button>
     <a class="gc" href="${esc(gcalDose(k, nd))}" target="_blank" rel="noopener" data-act="gcal:${k}">or Google Calendar</a></div>`;
 }
+// A web page can't tell whether the calendar saved the event, so ask (flash.confirm = {k, iso, via}); only "Yes" records it.
+const pendingConfirm = (k, nd) => !!nd && !!flash.confirm && flash.confirm.k === k && flash.confirm.iso === nd.toISOString();
+function confirmHTML(k, nd, now){
+  if (!pendingConfirm(k, nd)) return '';
+  const tip = flash.confirm.via === 'gcal' ? 'Tap Save in the Google Calendar tab, then come back.' : 'Open the downloaded file and tap Add, then come back.';
+  return `<div class="msg" role="status"><p>${esc(tip)} Did the reminder for ${esc(whenStr(nd, now))} save in your calendar?</p><div class="row"><button type="button" class="btn small" data-act="remind-yes:${k}">Yes, it’s saved</button><button type="button" class="btn small line" data-act="remind-no:${k}">No, try again</button></div></div>`;
+}
 // Time of the dose just logged (flash.taken), shown next to the next-dose time instead of a separate note.
 const justTaken = k => { const last = (S.doses[k]||[]).slice(-1)[0]; return flash.taken === k && last ? new Date(last) : null; };
 
@@ -690,11 +697,10 @@ function medRemindHTML(now){
     if (!nd) continue;
     const name = esc(med.name), w = esc(whenStr(nd, now));
     if (nd <= now){ rows.push(`<div class="mr" data-med="${k}"><p><b>${name}</b>: take your dose first, then add the next reminder.</p></div>`); continue; }
-    const dmsg = flash.dose && flash.dose.k === k ? `<div class="msg" role="status">${esc(flash.dose.txt)}</div>` : '';
-    if (isReminded(k, nd)){ rows.push(`<div class="mr" data-med="${k}"><p><b>✓ ${name} reminder set for ${w}</b></p>${dmsg}</div>`); continue; }
+    if (isReminded(k, nd)){ rows.push(`<div class="mr" data-med="${k}"><p><b>✓ ${name} reminder set for ${w}</b></p></div>`); continue; }
     miss = true;
     const tk = justTaken(k);
-    rows.push(`<div class="mr" data-med="${k}"><p class="ln"${tk ? ' role="status"' : ''}><b>${name}</b>: ${tk ? `not before ${w} · taken ${fmt(tk)}` : `next dose ${w}`}</p>${remindBtnHTML(k, nd, now, false)}${dmsg}</div>`);
+    rows.push(`<div class="mr" data-med="${k}"><p class="ln"${tk ? ' role="status"' : ''}><b>${name}</b>: ${tk ? `not before ${w} · taken ${fmt(tk)}` : `next dose ${w}`}</p>${remindBtnHTML(k, nd, now, false)}${confirmHTML(k, nd, now)}</div>`);
   }
   if (!rows.length) return '';
   return `<section class="card medrem ${miss ? 'miss' : ''}" id="medrem" aria-labelledby="medremh"><h2 id="medremh">Medicine reminders</h2>${rows.join('')}
@@ -735,10 +741,8 @@ function downloadICS(){
 function downloadDose(k){
   const now = appNow(), nd = medStart(S.setup, S, k);
   if (!nd || nd <= now){ render(); return; }
-  const name = 'next-dose-' + k + '.ics';
-  saveICS(buildDoseICS(k, nd, {now: new Date()}).text, name);
-  markReminded(k);
-  flash.dose = {k, txt:'Reminder for ' + whenStr(nd, now) + ' is in the file ' + name + '. Open it to add it to your calendar.'};
+  saveICS(buildDoseICS(k, nd, {now: new Date()}).text, 'next-dose-' + k + '.ics');
+  flash.confirm = {k, iso: nd.toISOString(), via:'ics'};   // recorded only when the patient says it saved
   render();
 }
 
@@ -795,7 +799,7 @@ function medsHTML(now){
         if (nd > now){
           const done = isReminded(k, nd);
           if (done) h += `<p><b>✓ Reminder set for ${esc(whenStr(nd, now))}</b></p>`;
-          h += remindBtnHTML(k, nd, now, done) + (flash.dose && flash.dose.k === k ? `<div class="msg" role="status">${esc(flash.dose.txt)}</div>` : '');
+          h += remindBtnHTML(k, nd, now, done) + confirmHTML(k, nd, now);
         }
       }
       if (last && !tk) h += `<p class="sub">Last taken ${esc(whenStr(last, now))}.</p>`;
@@ -921,8 +925,12 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const [act, arg] = b.dataset.act.split(/:(.*)/s);
   const now = appNow();
-  if (act === 'gcal'){ markReminded(arg); setTimeout(render, 0); return; }   // let the link open first, then show the tick
-  if (act !== 'dose-ics'){ flash.taken = null; flash.dose = null; }
+  if (act === 'gcal'){   // let the link open first, then ask whether it saved
+    const nd = medStart(S.setup, S, arg);
+    if (nd && nd > now) flash.confirm = {k:arg, iso:nd.toISOString(), via:'gcal'};
+    setTimeout(render, 0); return;
+  }
+  if (act !== 'dose-ics' && act !== 'remind-yes' && act !== 'remind-no'){ flash.taken = null; flash.confirm = null; }
   if (!act.startsWith('take-at')){ flash.takeAt = null; flash.takeAtErr = null; }
   if (act === 'reset'){ flash.reset = true; render(); return; }
   if (act === 'reset-no'){ flash = {}; render(); return; }
@@ -969,6 +977,8 @@ document.addEventListener('click', e => {
   if (act === 'finish-yes'){ S.finished[arg] = now.toISOString(); flash.finish = null; save(); render(); return; }
   if (act === 'ics'){ downloadICS(); return; }
   if (act === 'dose-ics'){ downloadDose(arg); return; }
+  if (act === 'remind-yes'){ if (pendingConfirm(arg, medStart(S.setup, S, arg))) markReminded(arg); flash.confirm = null; render(); return; }
+  if (act === 'remind-no'){ flash.confirm = null; render(); return; }
   if (act === 'eat'){
     S.meals.push(now.toISOString()); S.meals = S.meals.slice(-60); save();
     const n = dayIdx(new Date(S.setup.surgery), now), pain = activeMeds().some(k => MEDS[k].kind === 'pain');
