@@ -853,7 +853,7 @@ function setupHTML(){
       meds += `<h3 class="sublabel medgroup">${GROUPS[med.kind] || ''}</h3>`; lastKind = med.kind;
     }
     meds += `<div class="medset">${ck('m-'+k, esc(med.name), m.on, esc(med.dose) + (med.kind === 'prn' ? ' · only when needed' : ''))}
-      ${med.kind === 'prn' || !CONFIG.medTiming ? '' : `<div class="f" id="mf-${k}" ${m.on?'':'hidden'}><label for="mt-${k}">Next dose due at</label><input type="time" id="mt-${k}" value="${esc(m.next||'')}"></div>`}</div>`;
+      ${med.kind === 'prn' || !CONFIG.medTiming ? '' : `<div class="f" id="mf-${k}" ${m.on?'':'hidden'}><label for="mt-${k}">Next dose due at</label><input type="time" id="mt-${k}" value="${esc(m.next||'')}" aria-describedby="mterr-${k}"><div id="mterr-${k}" class="msg warn" role="alert" hidden></div></div>`}</div>`;
   }
   // Clinic phone is required (it feeds the call links); the periodontist mobile stays optional.
   const clinicF = `<div class="f"><label for="s-clinic">Clinic phone (needed to call the clinic)</label><input type="tel" id="s-clinic" value="${esc(st.clinic)}" autocomplete="tel" required aria-required="true" aria-describedby="clinic-err"><div id="clinic-err" class="msg warn" role="alert" hidden></div></div>`;
@@ -898,6 +898,16 @@ function wireSetup(){
     if (!surg || isNaN(new Date(surg))){ err.textContent = 'Please enter your surgery date and time.'; err.hidden = false; return; }
     for (const id of ['s-b','s-l','s-d','s-wake','s-bed']) if (!v(id)){   // open the times group so the empty field can be seen
       err.textContent = 'Please fill in all the meal and sleep times.'; err.hidden = false; $('#times').open = true; $('#'+id).focus(); return; }
+    // Every ticked medicine with timing needs its next-dose time, or its reminders can't be worked out.
+    document.querySelectorAll('[id^="mterr-"]').forEach(x => { x.hidden = true; });
+    document.querySelectorAll('[id^="mt-"]').forEach(x => x.removeAttribute('aria-invalid'));
+    for (const k of Object.keys(MEDS)){
+      const t = $('#mt-'+k);
+      if (t && $('#m-'+k).checked && !t.value){
+        const me = $('#mterr-'+k); me.textContent = 'Please enter when your next ' + MEDS[k].name.toLowerCase() + ' dose is due.'; me.hidden = false;
+        t.setAttribute('aria-invalid','true'); t.focus({preventScroll:true}); t.scrollIntoView({block:'center'}); return;
+      }
+    }
     if (cel && v('s-clinic').replace(/\D/g,'').length < 7){
       cerr.textContent = 'Please enter your clinic’s phone number (at least 7 digits). You’ll need it to call them quickly.'; cerr.hidden = false;
       cel.setAttribute('aria-invalid','true'); cel.focus({preventScroll:true}); cel.scrollIntoView({block:'center'}); return;
