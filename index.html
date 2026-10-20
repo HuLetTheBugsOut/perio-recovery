@@ -144,7 +144,8 @@ body{margin:0;overflow-x:hidden}
 .privacy{font-size:15px;color:var(--muted)}
 .consent{font-size:16px;color:var(--ink);font-weight:700}
 .calsub{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:6px}
-.survey a{color:var(--cta-ink)}
+.survey a.btn{color:var(--cta-ink);text-decoration:none}
+#help-fb a{color:var(--accent);font-weight:700}
 .remind{display:grid;gap:2px;justify-items:start}
 a.gc{color:var(--cta-ink);font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;padding:4px 2px;min-height:32px;display:inline-flex;align-items:center}
 .due .tk{font-size:17px;font-weight:700;color:var(--muted)}
@@ -212,8 +213,14 @@ const CONFIG = {
   // Day on which gentle brushing of the gum graft area can start (sheet: 1 week general rule, 2 weeks for grafts).
   graftBrushDay: 14,
 
-  // Link to a feedback survey. When filled, a survey card appears on Today from day 12. '' hides it.
-  surveyUrl: ''
+  // Feedback form link (e.g. a Google Form). '' hides every feedback prompt. When filled:
+  //   day 3-4: a short "How is it going?" check-in card on Today (until tapped or dismissed)
+  //   day 12 on: an end-of-recovery survey card on Today (until tapped or dismissed)
+  //   always: a "Send feedback or report a problem" link on the Help tab
+  feedbackUrl: '',
+  // Optional: the Google Form pre-fill field for "which stage", e.g. 'entry.123456789'.
+  // When set, each link fills it with "Day 3 check-in", "Day 12 survey" or "Help tab".
+  feedbackStageField: ''
 };
 /* Testers: add ?preview or #preview to the address to get a day slider (day 0-14). */
 
@@ -403,10 +410,11 @@ const buildDoseICS = (k, t, opts) => icsDoc([doseEvent(k, t)], opts);
 /*PURE-END*/
 
 const KEY = 'graftRecovery.v1';
-const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}, reminded:{}});
+const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}, reminded:{}, fb:{}});
 let S = blank();
 try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(blank(), JSON.parse(raw)); } catch(e) {}
 if (!S.reminded || typeof S.reminded !== 'object') S.reminded = {};   // older saved data
+if (!S.fb || typeof S.fb !== 'object') S.fb = {};
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 
 const P = CONFIG.practice || {};
@@ -445,7 +453,20 @@ const telHref = num => 'tel:' + esc(String(num).replace(/[^\d+]/g,''));
 const longDay = d => d.toLocaleDateString(undefined, {weekday:'short', day:'numeric', month:'short'});
 const whenStr = (d, now) => sameDay(d, now) ? fmt(d) : (sameDay(d, addDays(midnight(now),1)) ? 'tomorrow ' + fmt(d) : longDay(d) + ' ' + fmt(d));
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-const PRIVACY = 'This is a trial app. Everything you enter stays on this phone. Nothing is sent anywhere.';
+const PRIVACY = 'This is a trial app. Everything you enter stays on this phone. Nothing is sent anywhere.'
+  + (CONFIG.feedbackUrl ? ' Feedback forms are optional and only send what you type into them.' : '');
+// Feedback form link for one stage (pre-fills the stage when feedbackStageField is set).
+function fbHref(stage){
+  const u = CONFIG.feedbackUrl, f = CONFIG.feedbackStageField;
+  if (!f) return u;
+  return u + (u.includes('?') ? '&' : '?') + 'usp=pp_url&' + encodeURIComponent(f) + '=' + encodeURIComponent(stage);
+}
+// Today: a feedback card that stays until the patient opens the form or taps "Not now" (S.fb[id]).
+function fbCardHTML(id, title, text, btn, stage){
+  if (S.fb[id]) return '';
+  return `<section class="card survey" id="fb-${id}"><h3>${title}</h3><p>${text}</p>
+    <div class="row"><a class="btn small" href="${esc(fbHref(stage))}" target="_blank" rel="noopener" data-act="fb:${id}">${btn}</a><button type="button" class="btn small line" data-act="fb:${id}">Not now</button></div></section>`;
+}
 
 function defaults(){
   // Surgery time starts at 2 hours before now, rounded to the nearest hour (most patients set up on the way home).
@@ -679,8 +700,10 @@ function todayHTML(now){
       return `<li class="item"><span class="tick on" aria-hidden="true">${CHECK}</span><div class="txt"><div class="t">${esc(MEDS[x.k].name)}</div><div class="d">Taken at ${fmt(x.t)}</div></div>${last ? `<button type="button" class="btn small line" data-act="undo:${x.k}">Undo</button>` : '<span></span>'}</li>`; }).join('');
     h += `</ul></section>`;
   }
-  if (CONFIG.surveyUrl && n >= 12)
-    h += `<section class="card survey" id="survey"><h3>How did the app help?</h3><a class="btn" href="${esc(CONFIG.surveyUrl)}" target="_blank" rel="noopener">Take a 1-minute survey</a></section>`;
+  if (CONFIG.feedbackUrl){
+    if (n >= 3 && n <= 4) h += fbCardHTML('d3', 'How is the app going?', 'Two quick questions to help us improve it. About 30 seconds.', 'Answer now', 'Day 3 check-in');
+    if (n >= 12) h += fbCardHTML('d12', 'Did the app help your recovery?', 'A short survey to help the clinic decide whether to keep using it. About 2 minutes.', 'Take the survey', 'Day 12 survey');
+  }
   return h + calLinkHTML(n);
 }
 // Today, days 0–1 (and before surgery): one line pointing to the calendar setup in Settings.
@@ -838,6 +861,7 @@ function helpHTML(){
     <section class="card help"><h3>Dressing or stitches come loose</h3><p>Not a problem unless there is pain or heavy bleeding.</p></section>
     <section class="foot"><p>Your sheet gives two lengths for two steps. This app uses: salt rinses for ${CONFIG.rinseDays} days, and brushing the graft area from day ${CONFIG.graftBrushDay}. Please check with your periodontist.</p>
       <p>This app is a reminder aid based on your periodontist's instruction sheet.</p>
+      ${CONFIG.feedbackUrl ? `<p id="help-fb">Something not working, or an idea? <a href="${esc(fbHref('Help tab'))}" target="_blank" rel="noopener">Send feedback or report a problem</a></p>` : ''}
       <p class="privacy" id="help-privacy">${PRIVACY}</p></section>`;
 }
 
@@ -940,6 +964,7 @@ document.addEventListener('click', e => {
     if (nd && nd > now) flash.confirm = {k:arg, iso:nd.toISOString(), via:'gcal'};
     setTimeout(render, 0); return;
   }
+  if (act === 'fb'){ S.fb[arg] = now.toISOString(); save(); setTimeout(render, 0); return; }   // link opens first, then the card goes
   if (act !== 'dose-ics' && act !== 'remind-yes' && act !== 'remind-no'){ flash.taken = null; flash.confirm = null; }
   if (!act.startsWith('take-at')){ flash.takeAt = null; flash.takeAtErr = null; }
   if (act === 'reset'){ flash.reset = true; render(); return; }
