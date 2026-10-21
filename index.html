@@ -145,6 +145,7 @@ body{margin:0;overflow-x:hidden}
 .consent{font-size:16px;color:var(--ink);font-weight:700}
 .calsub{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:6px}
 .survey a.btn{color:var(--cta-ink);text-decoration:none}
+.fbwhat{margin:4px 0 10px;font-size:14px;color:var(--muted)}.fbwhat summary{cursor:pointer;text-decoration:underline}
 #help-fb a{color:var(--accent);font-weight:700}
 .remind{display:grid;gap:2px;justify-items:start}
 a.gc{color:var(--cta-ink);font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;padding:4px 2px;min-height:32px;display:inline-flex;align-items:center}
@@ -220,7 +221,11 @@ const CONFIG = {
   feedbackUrl: '',
   // Optional: the Google Form pre-fill field for "which stage", e.g. 'entry.123456789'.
   // When set, each link fills it with "Day 3 check-in", "Day 12 survey" or "Help tab".
-  feedbackStageField: ''
+  feedbackStageField: '',
+  // Optional: the pre-fill field for an anonymous usage summary on the day 12 survey, e.g. 'entry.987654321'.
+  // When set, the day 12 card offers an unticked "Include an anonymous summary" box and shows exactly
+  // what it would send (counts only: no medicine names, times or dates). '' hides the box.
+  usageField: ''
 };
 /* Testers: add ?preview or #preview to the address to get a day slider (day 0-14). */
 
@@ -410,11 +415,12 @@ const buildDoseICS = (k, t, opts) => icsDoc([doseEvent(k, t)], opts);
 /*PURE-END*/
 
 const KEY = 'graftRecovery.v1';
-const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}, reminded:{}, fb:{}});
+const blank = () => ({setup:null, ticks:{}, doses:{}, meals:[], finished:{}, reminded:{}, fb:{}, use:{days:[], doseCal:0, allCal:0}});
 let S = blank();
 try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(blank(), JSON.parse(raw)); } catch(e) {}
 if (!S.reminded || typeof S.reminded !== 'object') S.reminded = {};   // older saved data
 if (!S.fb || typeof S.fb !== 'object') S.fb = {};
+if (!S.use || typeof S.use !== 'object') S.use = {days:[], doseCal:0, allCal:0};
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 
 const P = CONFIG.practice || {};
@@ -454,18 +460,32 @@ const longDay = d => d.toLocaleDateString(undefined, {weekday:'short', day:'nume
 const whenStr = (d, now) => sameDay(d, now) ? fmt(d) : (sameDay(d, addDays(midnight(now),1)) ? 'tomorrow ' + fmt(d) : longDay(d) + ' ' + fmt(d));
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const PRIVACY = 'This is a trial app. Everything you enter stays on this phone. Nothing is sent anywhere.'
-  + (CONFIG.feedbackUrl ? ' Feedback forms are optional and only send what you type into them.' : '');
+  + (CONFIG.feedbackUrl ? (CONFIG.usageField ? ' Feedback forms are optional and only send what you type or choose to share.' : ' Feedback forms are optional and only send what you type into them.') : '');
 // Feedback form link for one stage (pre-fills the stage when feedbackStageField is set).
-function fbHref(stage){
-  const u = CONFIG.feedbackUrl, f = CONFIG.feedbackStageField;
-  if (!f) return u;
-  return u + (u.includes('?') ? '&' : '?') + 'usp=pp_url&' + encodeURIComponent(f) + '=' + encodeURIComponent(stage);
+function fbHref(stage, usage){
+  const u = CONFIG.feedbackUrl, q = [];
+  if (CONFIG.feedbackStageField) q.push(encodeURIComponent(CONFIG.feedbackStageField) + '=' + encodeURIComponent(stage));
+  if (usage && CONFIG.usageField) q.push(encodeURIComponent(CONFIG.usageField) + '=' + encodeURIComponent(usage));
+  return q.length ? u + (u.includes('?') ? '&' : '?') + 'usp=pp_url&' + q.join('&') : u;
+}
+// Anonymous usage summary for the day 12 survey: counts only, built on the phone, sent only if the patient ticks the box.
+let shareUsage = false;
+function usageSummary(now){
+  const n = dayIdx(new Date(S.setup.surgery), now), ks = activeMeds();
+  const doses = ks.reduce((a, k) => a + (S.doses[k] || []).length, 0);
+  const ua = navigator.userAgent, phone = /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : 'other';
+  return [`Recovery day ${n}`, `opened on ${S.use.days.length} days`, `${Object.keys(S.ticks).length} tasks ticked`,
+    `${ks.length} ${ks.length === 1 ? 'medicine' : 'medicines'}, ${doses} doses logged`, `${S.use.doseCal} next-dose reminders saved`,
+    `all-reminders file ${S.use.allCal ? 'used' : 'not used'}`, `“I’ve just eaten” ${S.meals.length}×`, phone].join(' · ');
 }
 // Today: a feedback card that stays until the patient opens the form or taps "Not now" (S.fb[id]).
-function fbCardHTML(id, title, text, btn, stage){
+function fbCardHTML(id, title, text, btn, stage, now){
   if (S.fb[id]) return '';
-  return `<section class="card survey" id="fb-${id}"><h3>${title}</h3><p>${text}</p>
-    <div class="row"><a class="btn small" href="${esc(fbHref(stage))}" target="_blank" rel="noopener" data-act="fb:${id}">${btn}</a><button type="button" class="btn small line" data-act="fb:${id}">Not now</button></div></section>`;
+  const usage = now && CONFIG.usageField ? usageSummary(now) : '';
+  const share = usage ? `<label class="check"><input type="checkbox" id="fb-share" ${shareUsage ? 'checked' : ''}><span>Include an anonymous summary of how I used the app<small>Counts only. No names, medicine names or times.</small></span></label>
+    <details class="fbwhat"><summary>See exactly what’s shared</summary><p id="fb-usage">${esc(usage)}</p></details>` : '';
+  return `<section class="card survey" id="fb-${id}"><h3>${title}</h3><p>${text}</p>${share}
+    <div class="row"><a class="btn small" id="fb-go-${id}" data-stage="${esc(stage)}" href="${esc(fbHref(stage, usage && shareUsage ? usage : ''))}" target="_blank" rel="noopener" data-act="fb:${id}">${btn}</a><button type="button" class="btn small line" data-act="fb:${id}">Not now</button></div></section>`;
 }
 
 function defaults(){
@@ -482,7 +502,7 @@ const isReminded = (k, nd) => !!nd && S.reminded[k] === nd.toISOString();
 function markReminded(k){
   const nd = medStart(S.setup, S, k);
   if (!nd || nd <= appNow()) return null;
-  S.reminded[k] = nd.toISOString(); save(); return nd;
+  S.reminded[k] = nd.toISOString(); S.use.doseCal++; save(); return nd;
 }
 const gcalDose = (k, nd) => { const ev = doseEvent(k, nd); return gcalURL(nd, ev.mins, ev.title, ev.details, 1); };
 // One calendar button per next dose: the .ics file, with Google Calendar as a small link under it.
@@ -538,6 +558,7 @@ function addDose(k, t){
 /* ---------- rendering ---------- */
 function render(){
   const now = appNow();
+  if (S.setup){ const dk = dateKey(new Date()); if (!S.use.days.includes(dk)){ S.use.days.push(dk); S.use.days = S.use.days.slice(-30); save(); } }   // days opened (real date, not preview)
   document.querySelectorAll('#tabs button').forEach(b => { if (b.dataset.act === 'tab:'+tab) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   $('#tabbtns').hidden = !S.setup;
   renderPreview();
@@ -702,7 +723,7 @@ function todayHTML(now){
   }
   if (CONFIG.feedbackUrl){
     if (n >= 3 && n <= 4) h += fbCardHTML('d3', 'How is the app going?', 'Two quick questions to help us improve it. About 30 seconds.', 'Answer now', 'Day 3 check-in');
-    if (n >= 12) h += fbCardHTML('d12', 'Did the app help your recovery?', 'A short survey to help the clinic decide whether to keep using it. About 2 minutes.', 'Take the survey', 'Day 12 survey');
+    if (n >= 12) h += fbCardHTML('d12', 'Did the app help your recovery?', 'A short survey to help the clinic decide whether to keep using it. About 2 minutes.', 'Take the survey', 'Day 12 survey', now);
   }
   return h + calLinkHTML(n);
 }
@@ -755,7 +776,7 @@ function downloadICS(){
   const now = appNow(), r = buildICS(S.setup, S, CONFIG, {from: addMin(now,-1), now: new Date()});
   if (!r.count) flash.ics = 'There are no reminders left to add.';
   else {
-    saveICS(r.text, 'graft-recovery.ics');
+    saveICS(r.text, 'graft-recovery.ics'); S.use.allCal++; save();
     flash.ics = r.count + ' reminders are in the file graft-recovery.ics. Open it to add them to your calendar.';
   }
   const c = $('#calsec');   // on Settings, redraw only this section so unsaved form edits are kept
@@ -955,6 +976,11 @@ function wireSetup(){
 }
 
 /* ---------- actions ---------- */
+document.addEventListener('change', e => {   // day 12 survey: add or drop the usage summary from the link
+  if (e.target.id !== 'fb-share') return;
+  shareUsage = e.target.checked;
+  const a = $('#fb-go-d12'), u = $('#fb-usage'); if (a) a.href = fbHref(a.dataset.stage, shareUsage && u ? u.textContent : '');
+});
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const [act, arg] = b.dataset.act.split(/:(.*)/s);
